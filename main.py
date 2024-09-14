@@ -222,7 +222,7 @@ def main():
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
 
     try:
-    if args.sync:
+        if args.sync:
         sync_tracks(synchronizer)
     elif args.remove_duplicates:
         remove_duplicates(synchronizer)
@@ -243,7 +243,8 @@ def main():
     except KeyboardInterrupt:
         logger.info("Process interrupted by user")
     finally:
-        db_manager.close()
+        finally:
+            db_manager.close()
 
 if __name__ == "__main__":
     main()
