@@ -223,7 +223,7 @@ def main():
 
     try:
         if args.sync:
-        sync_tracks(synchronizer)
+            sync_tracks(synchronizer)
     elif args.remove_duplicates:
         remove_duplicates(synchronizer)
     else:
