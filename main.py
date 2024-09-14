@@ -261,23 +261,20 @@ def parse_arguments():
         help="Force a full sync of all tracks",
     )
     parser.add_argument(
-        "--log-level",
-        type=str,
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Set the logging level (default: INFO)",
-    )
-    parser.add_argument(
         "--db-path",
         type=str,
         default="music_sync.db",
         help="Path to the database file (default: music_sync.db)",
     )
+    parser.add_argument(
+        "--remove-duplicates",
+        action="store_true",
+        help="Remove duplicate tracks after the first sync",
+    )
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
-    logging.getLogger().setLevel(args.log_level)
     load_dotenv()
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
@@ -290,13 +287,20 @@ def main():
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
 
     try:
+        first_run = True
         while True:
-            logger.info("Syncing tracks...")
+            logger.info("Синхронизация треков...")
             synchronizer.sync_tracks(force_full_sync=args.force_full_sync)
-            logger.info(f"Waiting {args.sleep} seconds...")
+            
+            if first_run and args.remove_duplicates:
+                logger.info("Удаление дубликатов...")
+                synchronizer.remove_duplicates()
+                first_run = False
+            
+            logger.info(f"Ожидание {args.sleep} секунд...")
             time.sleep(args.sleep)
     except KeyboardInterrupt:
-        logger.info("Sync process interrupted by user")
+        logger.info("Процесс синхронизации прерван пользователем")
     finally:
         db_manager.close()
 
