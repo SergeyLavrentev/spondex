@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import logging
 import os
@@ -246,14 +247,44 @@ class MusicSynchronizer:
         self.yandex.remove_duplicates()
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Music Synchronizer")
+    parser.add_argument(
+        "--sleep",
+        type=int,
+        default=60,
+        help="Time to sleep between syncs in seconds (default: 60)",
+    )
+    parser.add_argument(
+        "--force-full-sync",
+        action="store_true",
+        help="Force a full sync of all tracks",
+    )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
+    parser.add_argument(
+        "--db-path",
+        type=str,
+        default="music_sync.db",
+        help="Path to the database file (default: music_sync.db)",
+    )
+    return parser.parse_args()
+
 def main():
+    args = parse_arguments()
+    logging.getLogger().setLevel(args.log_level)
     load_dotenv()
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
         logger.error("YANDEX_TOKEN not found in .env file")
         return
 
-    db_manager = DatabaseManager("music_sync.db")
+    db_manager = DatabaseManager(args.db_path)
     yandex_service = YandexMusic(db_manager, yandex_token)
     spotify_service = SpotifyMusic(db_manager)
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
@@ -261,9 +292,9 @@ def main():
     try:
         while True:
             logger.info("Syncing tracks...")
-            synchronizer.sync_tracks(force_full_sync=False)
-            logger.info("Waiting 60 seconds...")
-            time.sleep(60)
+            synchronizer.sync_tracks(force_full_sync=args.force_full_sync)
+            logger.info(f"Waiting {args.sleep} seconds...")
+            time.sleep(args.sleep)
     except KeyboardInterrupt:
         logger.info("Sync process interrupted by user")
     finally:
