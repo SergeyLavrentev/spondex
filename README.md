@@ -45,12 +45,7 @@ SPOTIPY_REDIRECT_URI=http://localhost:8888/callback
 
 ### Получение токена Yandex Music
 
-1. Войдите в свой аккаунт Yandex Music в браузере.
-2. Откройте инструменты разработчика (F12 в большинстве браузеров).
-3. Перейдите на вкладку "Network" (Сеть).
-4. Найдите любой запрос к `api.music.yandex.net`.
-5. В заголовках запроса найдите `Authorization: OAuth ваш_токен`.
-6. Скопируйте токен и вставьте его в файл `.env`.
+https://yandex-music.readthedocs.io/en/main/token.html
 
 ### Настройка приложения Spotify
 
