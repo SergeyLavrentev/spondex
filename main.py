@@ -1,4 +1,3 @@
-import argparse
 import datetime
 import logging
 import os
@@ -14,7 +13,9 @@ from base_class import MusicService
 from database_manager import DatabaseManager
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -27,13 +28,21 @@ class YandexMusic(MusicService):
         short_tracks = self.client.users_likes_tracks()
         full_tracks = []
 
-        last_sync = self.db_manager.get_last_sync_time('yandex') if not force_full_sync else None
+        last_sync = (
+            self.db_manager.get_last_sync_time("yandex")
+            if not force_full_sync
+            else None
+        )
         if last_sync:
             last_sync = last_sync.replace(tzinfo=datetime.timezone.utc)
 
         for track in short_tracks:
-            added_at = datetime.datetime.strptime(track.timestamp, '%Y-%m-%dT%H:%M:%S%z') + datetime.timedelta(hours=3)
-            if force_full_sync or not self.db_manager.check_track_exists('yandex', track.id):
+            added_at = datetime.datetime.strptime(
+                track.timestamp, "%Y-%m-%dT%H:%M:%S%z"
+            ) + datetime.timedelta(hours=3)
+            if force_full_sync or not self.db_manager.check_track_exists(
+                "yandex", track.id
+            ):
                 if last_sync is None or added_at > last_sync:
                     full_tracks.append(track.fetch_track())
 
@@ -47,12 +56,18 @@ class YandexMusic(MusicService):
         return None
 
     def add_track(self, track: dict) -> Optional[str]:
-        yandex_track = self.search_track(track['track']['artists'][0]['name'], track['track']['name'])
+        yandex_track = self.search_track(
+            track["track"]["artists"][0]["name"], track["track"]["name"]
+        )
         if yandex_track:
-            self.client.users_likes_tracks_add(yandex_track['id'])
-            return yandex_track['id']
-        logger.warning(f"Track not found in Yandex: {track['track']['artists'][0]['name']} - {track['track']['name']}")
-        self.db_manager.add_undiscovered_track('yandex', track['track']['artists'][0]['name'], track['track']['name'])
+            self.client.users_likes_tracks_add(yandex_track["id"])
+            return yandex_track["id"]
+        logger.warning(
+            f"Track not found in Yandex: {track['track']['artists'][0]['name']} - {track['track']['name']}"
+        )
+        self.db_manager.add_undiscovered_track(
+            "yandex", track["track"]["artists"][0]["name"], track["track"]["name"]
+        )
         return None
 
     def remove_duplicates(self):
@@ -63,7 +78,7 @@ class YandexMusic(MusicService):
         for track in tracks:
             full_track = track.fetch_track()
             track_key = (full_track.title.lower(), full_track.artists[0].name.lower())
-            
+
             if track_key in tracks_seen:
                 tracks_to_remove.append(track.track_id)
             else:
@@ -73,28 +88,43 @@ class YandexMusic(MusicService):
             self.client.users_likes_tracks_remove(tracks_to_remove)
             logger.info(f"Removed {len(tracks_to_remove)} duplicate tracks from Yandex")
 
+
 class SpotifyMusic(MusicService):
     def __init__(self, db_manager: DatabaseManager):
         super().__init__(db_manager)
-        self.client = spotipy.Spotify(auth_manager=SpotifyOAuth(scope="user-library-read user-library-modify"))
+        self.client = spotipy.Spotify(
+            auth_manager=SpotifyOAuth(scope="user-library-read user-library-modify")
+        )
 
     def get_tracks(self, force_full_sync: bool) -> List[dict]:
-        last_sync = self.db_manager.get_last_sync_time('spotify') if not force_full_sync else None
+        last_sync = (
+            self.db_manager.get_last_sync_time("spotify")
+            if not force_full_sync
+            else None
+        )
         if last_sync:
             last_sync = last_sync.replace(tzinfo=datetime.timezone.utc)
 
         results = self.client.current_user_saved_tracks()
         tracks = []
 
-        while results['items']:
-            for item in results['items']:
-                track = item['track']
-                added_at = datetime.datetime.strptime(item['added_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc) + datetime.timedelta(hours=3)
+        while results["items"]:
+            for item in results["items"]:
+                track = item["track"]
+                added_at = datetime.datetime.strptime(
+                    item["added_at"], "%Y-%m-%dT%H:%M:%SZ"
+                ).replace(tzinfo=datetime.timezone.utc) + datetime.timedelta(hours=3)
                 if force_full_sync or last_sync is None or added_at > last_sync:
-                    if force_full_sync or not self.db_manager.check_track_exists('spotify', track['id']):
+                    if force_full_sync or not self.db_manager.check_track_exists(
+                        "spotify", track["id"]
+                    ):
                         tracks.append(item)
 
-            if results['next'] and (force_full_sync or not last_sync or any(added_at > last_sync for item in results['items'])):
+            if results["next"] and (
+                force_full_sync
+                or not last_sync
+                or any(added_at > last_sync for item in results["items"])
+            ):
                 results = self.client.next(results)
             else:
                 break
@@ -103,29 +133,40 @@ class SpotifyMusic(MusicService):
 
     def search_track(self, artist: str, title: str) -> Optional[dict]:
         query = f"{artist} {title}"
-        results = self.client.search(q=query, type='track', limit=1)
-        if results['tracks']['items']:
-            return results['tracks']['items'][0]
+        results = self.client.search(q=query, type="track", limit=1)
+        if results["tracks"]["items"]:
+            return results["tracks"]["items"][0]
         return None
 
     def add_track(self, track: dict) -> Optional[str]:
         if not self._check_duplicate(track.artists[0].name, track.title):
             spotify_track = self.search_track(track.artists[0].name, track.title)
             if spotify_track:
-                self.client.current_user_saved_tracks_add([spotify_track['id']])
-                return spotify_track['id']
+                self.client.current_user_saved_tracks_add([spotify_track["id"]])
+                return spotify_track["id"]
             else:
-                logger.warning(f"Track not found in Spotify: {track.artists[0].name} - {track.title}")
-                self.db_manager.add_undiscovered_track('spotify', track.artists[0].name, track.title)
+                logger.warning(
+                    f"Track not found in Spotify: {track.artists[0].name} - {track.title}"
+                )
+                self.db_manager.add_undiscovered_track(
+                    "spotify", track.artists[0].name, track.title
+                )
         else:
-            logger.info(f"Duplicate found in Spotify: {track.artists[0].name} - {track.title}")
+            logger.info(
+                f"Duplicate found in Spotify: {track.artists[0].name} - {track.title}"
+            )
         return None
 
     def _check_duplicate(self, artist: str, title: str) -> bool:
-        results = self.client.search(q=f"track:{title} artist:{artist}", type='track', limit=50)
-        for item in results['tracks']['items']:
-            if item['name'].lower() == title.lower() and item['artists'][0]['name'].lower() == artist.lower():
-                if self.client.current_user_saved_tracks_contains([item['id']])[0]:
+        results = self.client.search(
+            q=f"track:{title} artist:{artist}", type="track", limit=50
+        )
+        for item in results["tracks"]["items"]:
+            if (
+                item["name"].lower() == title.lower()
+                and item["artists"][0]["name"].lower() == artist.lower()
+            ):
+                if self.client.current_user_saved_tracks_contains([item["id"]])[0]:
                     return True
         return False
 
@@ -137,15 +178,15 @@ class SpotifyMusic(MusicService):
 
         while True:
             results = self.client.current_user_saved_tracks(limit=limit, offset=offset)
-            if len(results['items']) == 0:
+            if len(results["items"]) == 0:
                 break
 
-            for item in results['items']:
-                track = item['track']
-                track_key = (track['name'].lower(), track['artists'][0]['name'].lower())
-                
+            for item in results["items"]:
+                track = item["track"]
+                track_key = (track["name"].lower(), track["artists"][0]["name"].lower())
+
                 if track_key in tracks_seen:
-                    tracks_to_remove.append(track['id'])
+                    tracks_to_remove.append(track["id"])
                 else:
                     tracks_seen.add(track_key)
 
@@ -153,98 +194,81 @@ class SpotifyMusic(MusicService):
 
         if tracks_to_remove:
             for i in range(0, len(tracks_to_remove), 50):
-                batch = tracks_to_remove[i:i+50]
+                batch = tracks_to_remove[i : i + 50]
                 self.client.current_user_saved_tracks_delete(batch)
                 logger.info(f"Removed {len(batch)} duplicate tracks from Spotify")
 
+
 class MusicSynchronizer:
-    def __init__(self, yandex_service: YandexMusic, spotify_service: SpotifyMusic, db_manager: DatabaseManager):
+    def __init__(
+        self,
+        yandex_service: YandexMusic,
+        spotify_service: SpotifyMusic,
+        db_manager: DatabaseManager,
+    ):
         self.yandex = yandex_service
         self.spotify = spotify_service
         self.db_manager = db_manager
 
     def sync_tracks(self, force_full_sync: bool = False):
-
         current_time = datetime.datetime.now()
         # Sync Yandex to Spotify
         yandex_tracks = self.yandex.get_tracks(force_full_sync)
         for track in yandex_tracks:
             spotify_id = self.spotify.add_track(track)
             if spotify_id:
-                self.db_manager.insert_or_update_track(track.id, spotify_id, track.artists[0].name, track.title)
-                logger.info(f"Added to Spotify: {track.artists[0].name} - {track.title}")
+                self.db_manager.insert_or_update_track(
+                    track.id, spotify_id, track.artists[0].name, track.title
+                )
+                logger.info(
+                    f"Added to Spotify: {track.artists[0].name} - {track.title}"
+                )
 
-        self.db_manager.update_last_sync_time('yandex', current_time)
+        self.db_manager.update_last_sync_time("yandex", current_time)
 
         # Sync Spotify to Yandex
         spotify_tracks = self.spotify.get_tracks(force_full_sync)
         for item in spotify_tracks:
-            track = item['track']
+            track = item["track"]
             yandex_id = self.yandex.add_track(item)
             if yandex_id:
-                self.db_manager.insert_or_update_track(yandex_id, track['id'], track['artists'][0]['name'], track['name'])
-                logger.info(f"Added to Yandex: {track['artists'][0]['name']} - {track['name']}")
+                self.db_manager.insert_or_update_track(
+                    yandex_id, track["id"], track["artists"][0]["name"], track["name"]
+                )
+                logger.info(
+                    f"Added to Yandex: {track['artists'][0]['name']} - {track['name']}"
+                )
 
-        self.db_manager.update_last_sync_time('spotify', current_time)
+        self.db_manager.update_last_sync_time("spotify", current_time)
 
     def remove_duplicates(self):
         self.spotify.remove_duplicates()
         self.yandex.remove_duplicates()
 
-def sync_tracks(synchronizer):
-    logger.info("Syncing tracks...")
-    synchronizer.sync_tracks(force_full_sync=False)
-    logger.info("Sync completed.")
-
-def remove_duplicates(synchronizer):
-    logger.info("Removing duplicates...")
-    synchronizer.remove_duplicates()
-    logger.info("Duplicates removed.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Music Synchronization Tool")
-    parser.add_argument('--sync', action='store_true', help='Sync tracks between Yandex and Spotify')
-    parser.add_argument('--remove-duplicates', action='store_true', help='Remove duplicate tracks')
-    args = parser.parse_args()
     load_dotenv()
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
-        raise ValueError("YANDEX_TOKEN not found in .env file")
+        logger.error("YANDEX_TOKEN not found in .env file")
+        return
 
-    db_manager = DatabaseManager('music_sync.db')
-    yandex_service = YandexMusic(db_manager, yandex_token)
-    spotify_service = SpotifyMusic(db_manager)
-    synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
-
-    db_manager = DatabaseManager('music_sync.db')
+    db_manager = DatabaseManager("music_sync.db")
     yandex_service = YandexMusic(db_manager, yandex_token)
     spotify_service = SpotifyMusic(db_manager)
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
 
     try:
-        if args.sync:
-            sync_tracks(synchronizer)
-    elif args.remove_duplicates:
-        remove_duplicates(synchronizer)
-    else:
-        logger.info("No action specified. Use --sync or --remove-duplicates.")
         while True:
             logger.info("Syncing tracks...")
             synchronizer.sync_tracks(force_full_sync=False)
             logger.info("Waiting 60 seconds...")
             time.sleep(60)
-    try:
-        if args.sync:
-            sync_tracks(synchronizer)
-        elif args.remove_duplicates:
-            remove_duplicates(synchronizer)
-        else:
-            logger.info("No action specified. Use --sync or --remove-duplicates.")
     except KeyboardInterrupt:
-        logger.info("Process interrupted by user")
+        logger.info("Sync process interrupted by user")
     finally:
-        finally:
-            db_manager.close()
+        db_manager.close()
+
 
 if __name__ == "__main__":
     main()
