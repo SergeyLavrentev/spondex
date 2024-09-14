@@ -194,8 +194,7 @@ def main():
     load_dotenv()
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
-        logger.error("YANDEX_TOKEN not found in .env file")
-        return
+        raise ValueError("YANDEX_TOKEN not found in .env file")
 
     db_manager = DatabaseManager('music_sync.db')
     yandex_service = YandexMusic(db_manager, yandex_token)
