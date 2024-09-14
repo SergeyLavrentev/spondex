@@ -222,17 +222,28 @@ def main():
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
 
     try:
+    if args.sync:
+        sync_tracks(synchronizer)
+    elif args.remove_duplicates:
+        remove_duplicates(synchronizer)
+    else:
+        logger.info("No action specified. Use --sync or --remove-duplicates.")
         while True:
             logger.info("Syncing tracks...")
             synchronizer.sync_tracks(force_full_sync=False)
             logger.info("Waiting 60 seconds...")
             time.sleep(60)
-        while True:
-            logger.info("Syncing tracks...")
-            synchronizer.sync_tracks(force_full_sync=False)
-            logger.info("Waiting 60 seconds...")
-            time.sleep(60)
-    db_manager.close()
+    try:
+        if args.sync:
+            sync_tracks(synchronizer)
+        elif args.remove_duplicates:
+            remove_duplicates(synchronizer)
+        else:
+            logger.info("No action specified. Use --sync or --remove-duplicates.")
+    except KeyboardInterrupt:
+        logger.info("Process interrupted by user")
+    finally:
+        db_manager.close()
 
 if __name__ == "__main__":
     main()
