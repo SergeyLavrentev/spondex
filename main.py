@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import logging
 import os
@@ -190,11 +191,30 @@ class MusicSynchronizer:
         self.spotify.remove_duplicates()
         self.yandex.remove_duplicates()
 
+def sync_tracks(synchronizer):
+    logger.info("Syncing tracks...")
+    synchronizer.sync_tracks(force_full_sync=False)
+    logger.info("Sync completed.")
+
+def remove_duplicates(synchronizer):
+    logger.info("Removing duplicates...")
+    synchronizer.remove_duplicates()
+    logger.info("Duplicates removed.")
+
 def main():
+    parser = argparse.ArgumentParser(description="Music Synchronization Tool")
+    parser.add_argument('--sync', action='store_true', help='Sync tracks between Yandex and Spotify')
+    parser.add_argument('--remove-duplicates', action='store_true', help='Remove duplicate tracks')
+    args = parser.parse_args()
     load_dotenv()
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
         raise ValueError("YANDEX_TOKEN not found in .env file")
+
+    db_manager = DatabaseManager('music_sync.db')
+    yandex_service = YandexMusic(db_manager, yandex_token)
+    spotify_service = SpotifyMusic(db_manager)
+    synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
 
     db_manager = DatabaseManager('music_sync.db')
     yandex_service = YandexMusic(db_manager, yandex_token)
@@ -207,10 +227,12 @@ def main():
             synchronizer.sync_tracks(force_full_sync=False)
             logger.info("Waiting 60 seconds...")
             time.sleep(60)
-    except KeyboardInterrupt:
-        logger.info("Sync process interrupted by user")
-    finally:
-        db_manager.close()
+        while True:
+            logger.info("Syncing tracks...")
+            synchronizer.sync_tracks(force_full_sync=False)
+            logger.info("Waiting 60 seconds...")
+            time.sleep(60)
+    db_manager.close()
 
 if __name__ == "__main__":
     main()
