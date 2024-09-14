@@ -278,7 +278,7 @@ def main():
     load_dotenv()
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
-        logger.error("YANDEX_TOKEN not found in .env file")
+        logger.error("YANDEX_TOKEN не найден в файле .env")
         return
 
     db_manager = DatabaseManager(args.db_path)
@@ -287,18 +287,19 @@ def main():
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
 
     try:
-        first_run = True
-        while True:
-            logger.info("Синхронизация треков...")
-            synchronizer.sync_tracks(force_full_sync=args.force_full_sync)
-            
-            if first_run and args.remove_duplicates:
-                logger.info("Удаление дубликатов...")
-                synchronizer.remove_duplicates()
-                first_run = False
-            
-            logger.info(f"Ожидание {args.sleep} секунд...")
-            time.sleep(args.sleep)
+        if args.force_full_sync:
+            logger.info("Выполняется полная синхронизация...")
+            synchronizer.sync_tracks(force_full_sync=True)
+            logger.info("Удаление дубликатов...")
+            synchronizer.remove_duplicates()
+            logger.info("Полная синхронизация и удаление дубликатов завершены.")
+            logger.info("Пожалуйста, запустите приложение снова без флага --force-full-sync для регулярной синхронизации.")
+        else:
+            while True:
+                logger.info("Синхронизация треков...")
+                synchronizer.sync_tracks(force_full_sync=False)
+                logger.info(f"Ожидание {args.sleep} секунд...")
+                time.sleep(args.sleep)
     except KeyboardInterrupt:
         logger.info("Процесс синхронизации прерван пользователем")
     finally:
