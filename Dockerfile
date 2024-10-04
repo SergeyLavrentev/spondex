@@ -10,8 +10,8 @@ RUN pip install uv && uv pip install --no-cache-dir -r requirements.txt --system
 
 EXPOSE 8888
 
-VOLUME /app/data
+VOLUME /app
 
-RUN mkdir -p /app/data && chmod 777 /app/data
+RUN mkdir -p /app && chmod 777 /app
 
 CMD []

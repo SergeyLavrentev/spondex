@@ -278,7 +278,7 @@ def main():
     load_dotenv()
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
-        logger.error("YANDEX_TOKEN not found in .env file")
+        logger.error("YANDEX_TOKEN не найден в файле .env")
         return
 
     db_manager = DatabaseManager(args.db_path)
