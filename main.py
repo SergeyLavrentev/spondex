@@ -289,16 +289,21 @@ def main():
     try:
         first_run = True
         while True:
-            logger.info("Синхронизация треков...")
-            synchronizer.sync_tracks(force_full_sync=args.force_full_sync)
-            
-            if first_run and args.remove_duplicates:
-                logger.info("Удаление дубликатов...")
-                synchronizer.remove_duplicates()
-                first_run = False
-            
-            logger.info(f"Ожидание {args.sleep} секунд...")
-            time.sleep(args.sleep)
+            try:
+                logger.info("Синхронизация треков...")
+                synchronizer.sync_tracks(force_full_sync=args.force_full_sync)
+                
+                if first_run and args.remove_duplicates:
+                    logger.info("Удаление дубликатов...")
+                    synchronizer.remove_duplicates()
+                    first_run = False
+                
+                logger.info(f"Ожидание {args.sleep} секунд...")
+                time.sleep(args.sleep)
+            except Exception as e:
+                logger.error(f"Произошла ошибка: {e}")
+                logger.info("Ожидание 60 секунд перед повторной попыткой...")
+                time.sleep(60)
     except KeyboardInterrupt:
         logger.info("Процесс синхронизации прерван пользователем")
     finally:
