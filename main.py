@@ -13,7 +13,6 @@ from yandex_music import Client as YandexClient
 from base_class import MusicService
 from database_manager import DatabaseManager
 
-# Set up logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -281,7 +280,16 @@ def main():
         logger.error("YANDEX_TOKEN не найден в файле .env")
         return
 
-    db_manager = DatabaseManager(args.db_path)
+    # Параметры подключения к PostgreSQL
+    db_params = {
+        "dbname": os.getenv("POSTGRES_DB", "music_sync"),
+        "user": os.getenv("POSTGRES_USER"),
+        "password": os.getenv("POSTGRES_PASSWORD"),
+        "host": os.getenv("POSTGRES_HOST", "localhost"),
+        "port": os.getenv("POSTGRES_PORT", "5432")
+    }
+
+    db_manager = DatabaseManager(db_params)
     yandex_service = YandexMusic(db_manager, yandex_token)
     spotify_service = SpotifyMusic(db_manager)
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
