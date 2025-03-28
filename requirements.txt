@@ -18,3 +18,4 @@ urllib3==2.2.3
 uv==0.4.10
 yandex-music==2.2.0
 yarl==1.11.1
+psycopg2-binary==2.9.10

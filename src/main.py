@@ -260,12 +260,6 @@ def parse_arguments():
         help="Force a full sync of all tracks",
     )
     parser.add_argument(
-        "--db-path",
-        type=str,
-        default="music_sync.db",
-        help="Path to the database file (default: music_sync.db)",
-    )
-    parser.add_argument(
         "--remove-duplicates",
         action="store_true",
         help="Remove duplicate tracks after the first sync",
@@ -274,6 +268,7 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
+    logger.info(f"Запущен скрипт с параметрами: {args}")
     load_dotenv()
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
