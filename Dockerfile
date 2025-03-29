@@ -4,4 +4,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8888
-CMD ["python", "src/main.py"]
+ENTRYPOINT ["python", "src/main.py"]
+CMD []
