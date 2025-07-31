@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import traceback
+import json
 from dotenv import load_dotenv
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -98,7 +99,7 @@ def main():
                 else:
                     # Создаем новый кэш-файл на основе полученного токена
                     with open("./.cache", "w") as f:
-                        f.write(str(token_info))
+                        json.dump(token_info, f)
                     print("Создан новый кэш-файл на основе полученного токена")
     
     except Exception as e:
@@ -107,7 +108,7 @@ def main():
         # Даже при ошибке мы создаем файл .cache, чтобы скрипт start.sh мог продолжить работу
         if token_info and not os.path.exists("./.cache"):
             with open("./.cache", "w") as f:
-                f.write(str(token_info))
+                json.dump(token_info, f)
             print("Создан резервный кэш-файл, несмотря на ошибку")
         sys.exit(1)
 

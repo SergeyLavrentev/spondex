@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import json
 import logging
 import os
 import time
@@ -17,6 +18,48 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def check_and_fix_spotify_cache():
+    """Проверяет и исправляет кэш файл Spotify если он некорректный"""
+    cache_path = "./.cache"
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r") as f:
+                content = f.read().strip()
+                
+            # Проверяем, является ли это валидным JSON
+            json.loads(content)
+            logger.info("Кэш файл Spotify корректен")
+            
+        except json.JSONDecodeError:
+            logger.warning("Обнаружен некорректный кэш файл Spotify, попытка исправления...")
+            try:
+                # Пытаемся исправить, если это Python dict строка
+                if content.startswith("{'") and content.endswith("'}"):
+                    # Преобразуем Python dict строку в валидный JSON
+                    content_fixed = content.replace("'", '"')
+                    # Проверяем, что теперь это валидный JSON
+                    parsed = json.loads(content_fixed)
+                    
+                    # Перезаписываем файл с корректным JSON
+                    with open(cache_path, "w") as f:
+                        json.dump(parsed, f)
+                    logger.info("Кэш файл Spotify успешно исправлен")
+                else:
+                    logger.error("Не удалось исправить кэш файл автоматически. Удаляем некорректный файл.")
+                    os.remove(cache_path)
+            except Exception as e:
+                logger.error(f"Ошибка при исправлении кэш файла: {e}")
+                logger.info("Удаляем некорректный кэш файл")
+                try:
+                    os.remove(cache_path)
+                except:
+                    pass
+        except Exception as e:
+            logger.error(f"Ошибка при проверке кэш файла: {e}")
+    else:
+        logger.warning("Кэш файл Spotify не найден. Убедитесь, что вы выполнили аутентификацию.")
 
 
 class YandexMusic(MusicService):
@@ -270,6 +313,10 @@ def main():
     args = parse_arguments()
     logger.info(f"Запущен скрипт с параметрами: {args}")
     load_dotenv()
+    
+    # Проверяем и исправляем кэш файл Spotify перед началом работы
+    check_and_fix_spotify_cache()
+    
     yandex_token = os.getenv("YANDEX_TOKEN")
     if not yandex_token:
         logger.error("YANDEX_TOKEN не найден в файле .env")
