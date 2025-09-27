@@ -181,52 +181,14 @@ python scripts/clear_playlists.py --spotify --skip-followed --yes
    - Не удалять дубликаты автоматически
    - Работать более быстро и эффективно
 
-## Коротко о работе с форком
+## Контрибуция
 
-Если вы форкнули репозиторий и хотите периодически подтягивать изменения из моего (основного) репозитория:
+Смотри подробное руководство: [CONTRIBUTING.md](./CONTRIBUTING.md)
 
-1. Добавьте remote оригинала (если его ещё нет):
-   ```bash
-   git remote add upstream https://github.com/SergeyLavrentev/spondex.git
-   git remote -v
-   ```
-2. Обновите ваш `main` (линейная история):
-   ```bash
-   git fetch upstream
-   git checkout main
-   git rebase upstream/main
-   # или без переписывания истории
-   # git merge upstream/main
-   ```
-3. Разработка фич:
-   ```bash
-   git checkout -b feature/awesome
-   # ... код ...
-   git push -u origin feature/awesome
-   ```
-4. Создание Pull Request:
-   - На странице форка нажмите "Compare & pull request".
-   - Base: `SergeyLavrentev/main`, Compare: ваша ветка.
-5. Быстрая синхронизация:
-   ```bash
-   git fetch upstream && git rebase upstream/main && git push origin main
-   ```
-
-Полезные alias (в `~/.gitconfig`):
-```ini
-[alias]
-  up = !git fetch upstream && git rebase upstream/main
-  sync = !git fetch upstream && git checkout main && git rebase upstream/main && git push origin main
-  st = status -sb
-  lg = log --oneline --graph --decorate --all
-```
-
-Откат неудачного rebase:
-```bash
-git rebase --abort
-git reflog
-git reset --hard <hash>
-```
+Кратко:
+- Форк → ветка → коммиты (Conventional Commits) → Pull Request.
+- Для синхронизации: `git fetch upstream && git rebase upstream/main`.
+- Alias и дополнительные советы также в файле CONTRIBUTING.
 
 ## Ограничения
 
