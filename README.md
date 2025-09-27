@@ -28,7 +28,7 @@
 
 Клонируйте репозиторий:
 ```bash
-git clone https://github.com/anonymousmaharaj/spondex.git
+git clone https://github.com/SergeyLavrentev/spondex.git
 cd spondex
 ```
 ### Предварительная настройка
@@ -181,56 +181,52 @@ python scripts/clear_playlists.py --spotify --skip-followed --yes
    - Не удалять дубликаты автоматически
    - Работать более быстро и эффективно
 
-   ## Работа с форком и обновление из оригинального репозитория
+## Коротко о работе с форком
 
-   Если вы форкнули проект и хотите одновременно вносить изменения и получать обновления из оригинального репозитория:
+Если вы форкнули репозиторий и хотите периодически подтягивать изменения из моего (основного) репозитория:
 
-   1. Настройте два remotes (если ещё не настроены):
-      ```bash
-      git remote add upstream https://github.com/anonymousmaharaj/spondex.git   # оригинал
-      git remote -v
-      ```
-   2. Ваш форк обычно называется `origin` (например: `https://github.com/<you>/spondex`).
-   3. Обновить свою ветку `main` из оригинала (линейная история):
-      ```bash
-      git fetch upstream
-      git checkout main
-      git rebase upstream/main
-      ```
-      Альтернатива без переписывания истории:
-      ```bash
-      git merge upstream/main
-      ```
-   4. Пуш своих изменений в форк:
-      ```bash
-      git push              # если установлен upstream у ветки
-      git push -u origin feature/my-change   # первый пуш новой ветки
-      ```
-   5. Создание Pull Request в оригинальный репозиторий:
-      - Пушите ветку в свой форк.
-      - На GitHub нажмите "Compare & pull request" (base: `anonymousmaharaj/main`, compare: `your-fork/feature/...`).
-   6. Быстрая синхронизация (можно сделать alias):
-      ```bash
-      git fetch upstream && git rebase upstream/main && git push origin main
-      ```
-
-   Полезные alias (добавьте в `~/.gitconfig`):
-   ```ini
-   [alias]
-     up = !git fetch upstream && git rebase upstream/main
-     sync = !git fetch upstream && git checkout main && git rebase upstream/main && git push origin main
-     st = status -sb
-     lg = log --oneline --graph --decorate --all
-   ```
-
-   Если после `rebase` что-то пошло не так:
+1. Добавьте remote оригинала (если его ещё нет):
    ```bash
-   git rebase --abort          # отменить
-   git reflog                  # найти предыдущий HEAD
-   git reset --hard <hash>     # вернуть состояние
+   git remote add upstream https://github.com/SergeyLavrentev/spondex.git
+   git remote -v
+   ```
+2. Обновите ваш `main` (линейная история):
+   ```bash
+   git fetch upstream
+   git checkout main
+   git rebase upstream/main
+   # или без переписывания истории
+   # git merge upstream/main
+   ```
+3. Разработка фич:
+   ```bash
+   git checkout -b feature/awesome
+   # ... код ...
+   git push -u origin feature/awesome
+   ```
+4. Создание Pull Request:
+   - На странице форка нажмите "Compare & pull request".
+   - Base: `SergeyLavrentev/main`, Compare: ваша ветка.
+5. Быстрая синхронизация:
+   ```bash
+   git fetch upstream && git rebase upstream/main && git push origin main
    ```
 
-   Это краткий справочник — раздел можно удалить или сократить при необходимости.
+Полезные alias (в `~/.gitconfig`):
+```ini
+[alias]
+  up = !git fetch upstream && git rebase upstream/main
+  sync = !git fetch upstream && git checkout main && git rebase upstream/main && git push origin main
+  st = status -sb
+  lg = log --oneline --graph --decorate --all
+```
+
+Откат неудачного rebase:
+```bash
+git rebase --abort
+git reflog
+git reset --hard <hash>
+```
 
 ## Ограничения
 
