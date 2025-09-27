@@ -181,6 +181,57 @@ python scripts/clear_playlists.py --spotify --skip-followed --yes
    - Не удалять дубликаты автоматически
    - Работать более быстро и эффективно
 
+   ## Работа с форком и обновление из оригинального репозитория
+
+   Если вы форкнули проект и хотите одновременно вносить изменения и получать обновления из оригинального репозитория:
+
+   1. Настройте два remotes (если ещё не настроены):
+      ```bash
+      git remote add upstream https://github.com/anonymousmaharaj/spondex.git   # оригинал
+      git remote -v
+      ```
+   2. Ваш форк обычно называется `origin` (например: `https://github.com/<you>/spondex`).
+   3. Обновить свою ветку `main` из оригинала (линейная история):
+      ```bash
+      git fetch upstream
+      git checkout main
+      git rebase upstream/main
+      ```
+      Альтернатива без переписывания истории:
+      ```bash
+      git merge upstream/main
+      ```
+   4. Пуш своих изменений в форк:
+      ```bash
+      git push              # если установлен upstream у ветки
+      git push -u origin feature/my-change   # первый пуш новой ветки
+      ```
+   5. Создание Pull Request в оригинальный репозиторий:
+      - Пушите ветку в свой форк.
+      - На GitHub нажмите "Compare & pull request" (base: `anonymousmaharaj/main`, compare: `your-fork/feature/...`).
+   6. Быстрая синхронизация (можно сделать alias):
+      ```bash
+      git fetch upstream && git rebase upstream/main && git push origin main
+      ```
+
+   Полезные alias (добавьте в `~/.gitconfig`):
+   ```ini
+   [alias]
+     up = !git fetch upstream && git rebase upstream/main
+     sync = !git fetch upstream && git checkout main && git rebase upstream/main && git push origin main
+     st = status -sb
+     lg = log --oneline --graph --decorate --all
+   ```
+
+   Если после `rebase` что-то пошло не так:
+   ```bash
+   git rebase --abort          # отменить
+   git reflog                  # найти предыдущий HEAD
+   git reset --hard <hash>     # вернуть состояние
+   ```
+
+   Это краткий справочник — раздел можно удалить или сократить при необходимости.
+
 ## Ограничения
 
 - Приложение синхронизирует только любимые треки и не работает с плейлистами.
