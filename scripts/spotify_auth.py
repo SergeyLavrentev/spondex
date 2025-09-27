@@ -38,11 +38,22 @@ def main():
         cache_path = os.path.join(os.path.expanduser("~"), ".cache")
         
         # Запускаем процесс аутентификации
+        scopes = " ".join(
+            [
+                "user-library-read",
+                "user-library-modify",
+                "user-follow-read",
+                "user-follow-modify",
+                "playlist-read-private",
+                "playlist-read-collaborative",
+            ]
+        )
+
         sp_oauth = SpotifyOAuth(
             client_id=client_id,
             client_secret=client_secret,
             redirect_uri=redirect_uri,
-            scope="user-library-read user-library-modify",
+            scope=scopes,
             open_browser=True,
             cache_path=os.path.join(cache_path, "spotipy")  # Явно указываем путь к кэшу
         )
