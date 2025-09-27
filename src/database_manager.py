@@ -1,7 +1,8 @@
+import datetime
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
 import psycopg2
 from psycopg2.extras import DictCursor
-import datetime
-from typing import Optional
 
 
 class DatabaseManager:
@@ -58,6 +59,22 @@ class DatabaseManager:
         )
         self.conn.commit()
 
+    def get_spotify_id(self, yandex_id: str) -> Optional[str]:
+        self.cursor.execute(
+            "SELECT spotify_id FROM tracks WHERE yandex_id = %s",
+            (yandex_id,),
+        )
+        result = self.cursor.fetchone()
+        return result[0] if result else None
+
+    def get_yandex_id(self, spotify_id: str) -> Optional[str]:
+        self.cursor.execute(
+            "SELECT yandex_id FROM tracks WHERE spotify_id = %s",
+            (spotify_id,),
+        )
+        result = self.cursor.fetchone()
+        return result[0] if result else None
+
     def add_undiscovered_track(self, service: str, artist: str, title: str):
         self.cursor.execute(
             """
@@ -66,6 +83,276 @@ class DatabaseManager:
             """,
             (service, artist, title)
         )
+        self.conn.commit()
+
+    # --- Album & artist link helpers -----------------------------------
+
+    def link_album_ids(
+        self,
+        yandex_id: str,
+        spotify_id: str,
+        normalized_key: str | None = None,
+    ) -> None:
+        self.cursor.execute(
+            "DELETE FROM album_links WHERE yandex_id = %s OR spotify_id = %s",
+            (yandex_id, spotify_id),
+        )
+        self.cursor.execute(
+            """
+            INSERT INTO album_links (yandex_id, spotify_id, normalized_key)
+            VALUES (%s, %s, %s)
+            """,
+            (yandex_id, spotify_id, normalized_key),
+        )
+        self.conn.commit()
+
+    def get_album_link(self, service: str, entity_id: str) -> Optional[str]:
+        if service == "yandex":
+            self.cursor.execute(
+                "SELECT spotify_id FROM album_links WHERE yandex_id = %s",
+                (entity_id,),
+            )
+        else:
+            self.cursor.execute(
+                "SELECT yandex_id FROM album_links WHERE spotify_id = %s",
+                (entity_id,),
+            )
+        result = self.cursor.fetchone()
+        return result[0] if result else None
+
+    def find_album_link_by_key(self, normalized_key: str) -> Optional[Tuple[str, str]]:
+        self.cursor.execute(
+            "SELECT yandex_id, spotify_id FROM album_links WHERE normalized_key = %s",
+            (normalized_key,),
+        )
+        result = self.cursor.fetchone()
+        if result:
+            return result["yandex_id"], result["spotify_id"]
+        return None
+
+    def unlink_album(self, service: str, entity_id: str) -> None:
+        if service == "yandex":
+            self.cursor.execute("DELETE FROM album_links WHERE yandex_id = %s", (entity_id,))
+        else:
+            self.cursor.execute("DELETE FROM album_links WHERE spotify_id = %s", (entity_id,))
+        self.conn.commit()
+
+    def link_artist_ids(
+        self,
+        yandex_id: str,
+        spotify_id: str,
+        normalized_key: str | None = None,
+    ) -> None:
+        self.cursor.execute(
+            "DELETE FROM artist_links WHERE yandex_id = %s OR spotify_id = %s",
+            (yandex_id, spotify_id),
+        )
+        self.cursor.execute(
+            """
+            INSERT INTO artist_links (yandex_id, spotify_id, normalized_key)
+            VALUES (%s, %s, %s)
+            """,
+            (yandex_id, spotify_id, normalized_key),
+        )
+        self.conn.commit()
+
+    def get_artist_link(self, service: str, entity_id: str) -> Optional[str]:
+        if service == "yandex":
+            self.cursor.execute(
+                "SELECT spotify_id FROM artist_links WHERE yandex_id = %s",
+                (entity_id,),
+            )
+        else:
+            self.cursor.execute(
+                "SELECT yandex_id FROM artist_links WHERE spotify_id = %s",
+                (entity_id,),
+            )
+        result = self.cursor.fetchone()
+        return result[0] if result else None
+
+    def find_artist_link_by_key(self, normalized_key: str) -> Optional[Tuple[str, str]]:
+        self.cursor.execute(
+            "SELECT yandex_id, spotify_id FROM artist_links WHERE normalized_key = %s",
+            (normalized_key,),
+        )
+        result = self.cursor.fetchone()
+        if result:
+            return result["yandex_id"], result["spotify_id"]
+        return None
+
+    def unlink_artist(self, service: str, entity_id: str) -> None:
+        if service == "yandex":
+            self.cursor.execute("DELETE FROM artist_links WHERE yandex_id = %s", (entity_id,))
+        else:
+            self.cursor.execute("DELETE FROM artist_links WHERE spotify_id = %s", (entity_id,))
+        self.conn.commit()
+
+    # --- Playlist helpers -------------------------------------------------
+
+    def upsert_playlist(
+        self,
+        service: str,
+        playlist_id: str,
+        name: Optional[str],
+        owner: Optional[str],
+        last_synced: Optional[datetime.datetime] = None,
+    ) -> int:
+        self.cursor.execute(
+            """
+            INSERT INTO playlists (service, playlist_id, name, owner, last_synced)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (service, playlist_id) DO UPDATE
+            SET name = EXCLUDED.name,
+                owner = EXCLUDED.owner,
+                last_synced = EXCLUDED.last_synced
+            RETURNING id
+            """,
+            (service, playlist_id, name, owner, last_synced),
+        )
+        playlist_pk = self.cursor.fetchone()[0]
+        self.conn.commit()
+        return playlist_pk
+
+    def update_playlist_last_synced(
+        self, service: str, playlist_id: str, sync_time: datetime.datetime
+    ) -> None:
+        self.cursor.execute(
+            """
+            UPDATE playlists
+            SET last_synced = %s
+            WHERE service = %s AND playlist_id = %s
+            """,
+            (sync_time, service, playlist_id),
+        )
+        self.conn.commit()
+
+    def get_playlist(self, service: str, playlist_id: str) -> Optional[Dict[str, Any]]:
+        self.cursor.execute(
+            "SELECT * FROM playlists WHERE service = %s AND playlist_id = %s",
+            (service, playlist_id),
+        )
+        return self.cursor.fetchone()
+
+    def fetch_playlists(self, service: str) -> List[Dict[str, Any]]:
+        self.cursor.execute(
+            "SELECT * FROM playlists WHERE service = %s ORDER BY name",
+            (service,),
+        )
+        return list(self.cursor.fetchall())
+
+    def find_playlist_by_name(self, service: str, name: str) -> Optional[Dict[str, Any]]:
+        self.cursor.execute(
+            "SELECT * FROM playlists WHERE service = %s AND LOWER(name) = LOWER(%s)",
+            (service, name),
+        )
+        return self.cursor.fetchone()
+
+    def remove_playlists_not_in(self, service: str, playlist_ids: Sequence[str]) -> None:
+        if not playlist_ids:
+            self.cursor.execute("DELETE FROM playlists WHERE service = %s", (service,))
+        else:
+            self.cursor.execute(
+                "DELETE FROM playlists WHERE service = %s AND playlist_id NOT IN %s",
+                (service, tuple(playlist_ids)),
+            )
+        self.conn.commit()
+
+    def set_playlist_tracks(
+        self,
+        playlist_pk: int,
+        service: str,
+        tracks: Iterable[Tuple[str, Optional[int], Optional[datetime.datetime]]],
+    ) -> None:
+        self.cursor.execute(
+            "DELETE FROM playlist_tracks WHERE playlist_pk = %s",
+            (playlist_pk,),
+        )
+        batch: List[Tuple[int, str, str, Optional[int], Optional[datetime.datetime]]] = []
+        for track_id, position, added_at in tracks:
+            batch.append((playlist_pk, service, track_id, position, added_at))
+
+        if batch:
+            self.cursor.executemany(
+                """
+                INSERT INTO playlist_tracks (playlist_pk, service, track_id, position, added_at)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                batch,
+            )
+        self.conn.commit()
+
+    def get_playlist_tracks(self, playlist_pk: int) -> List[Dict[str, Any]]:
+        self.cursor.execute(
+            """
+            SELECT track_id, position, added_at
+            FROM playlist_tracks
+            WHERE playlist_pk = %s
+            ORDER BY position NULLS LAST, added_at
+            """,
+            (playlist_pk,),
+        )
+        return list(self.cursor.fetchall())
+
+    # --- Favorites helpers ------------------------------------------------
+
+    def upsert_favorite_album(
+        self,
+        service: str,
+        album_id: str,
+        name: Optional[str],
+        artist: Optional[str],
+        last_seen: Optional[datetime.datetime],
+    ) -> None:
+        self.cursor.execute(
+            """
+            INSERT INTO favorite_albums (service, album_id, name, artist, last_seen)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (service, album_id) DO UPDATE
+            SET name = EXCLUDED.name,
+                artist = EXCLUDED.artist,
+                last_seen = EXCLUDED.last_seen
+            """,
+            (service, album_id, name, artist, last_seen),
+        )
+        self.conn.commit()
+
+    def remove_favorite_albums_not_in(self, service: str, album_ids: Sequence[str]) -> None:
+        if not album_ids:
+            self.cursor.execute("DELETE FROM favorite_albums WHERE service = %s", (service,))
+        else:
+            self.cursor.execute(
+                "DELETE FROM favorite_albums WHERE service = %s AND album_id NOT IN %s",
+                (service, tuple(album_ids)),
+            )
+        self.conn.commit()
+
+    def upsert_favorite_artist(
+        self,
+        service: str,
+        artist_id: str,
+        name: Optional[str],
+        last_seen: Optional[datetime.datetime],
+    ) -> None:
+        self.cursor.execute(
+            """
+            INSERT INTO favorite_artists (service, artist_id, name, last_seen)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (service, artist_id) DO UPDATE
+            SET name = EXCLUDED.name,
+                last_seen = EXCLUDED.last_seen
+            """,
+            (service, artist_id, name, last_seen),
+        )
+        self.conn.commit()
+
+    def remove_favorite_artists_not_in(self, service: str, artist_ids: Sequence[str]) -> None:
+        if not artist_ids:
+            self.cursor.execute("DELETE FROM favorite_artists WHERE service = %s", (service,))
+        else:
+            self.cursor.execute(
+                "DELETE FROM favorite_artists WHERE service = %s AND artist_id NOT IN %s",
+                (service, tuple(artist_ids)),
+            )
         self.conn.commit()
 
     def close(self):
