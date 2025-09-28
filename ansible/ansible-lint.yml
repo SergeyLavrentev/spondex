@@ -1,0 +1,5 @@
+profile: min
+skip_list:
+  - run-once
+  - literal-compare
+warn_list: []
