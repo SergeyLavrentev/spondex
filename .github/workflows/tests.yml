@@ -34,16 +34,20 @@ jobs:
           uv tool install ansible-lint
 
       - name: Install Ansible collections
+        env:
+          ANSIBLE_CONFIG: ansible/ansible.cfg
         run: ansible-galaxy collection install -r ansible/requirements.yml
 
       - name: Run Ansible lint
         env:
           ANSIBLE_COLLECTIONS_PATH: ~/.ansible/collections:/usr/share/ansible/collections
+          ANSIBLE_CONFIG: ansible/ansible.cfg
         run: ansible-lint ansible/deploy.yml
 
       - name: Run Ansible syntax check
         env:
           ANSIBLE_COLLECTIONS_PATH: ~/.ansible/collections:/usr/share/ansible/collections
+          ANSIBLE_CONFIG: ansible/ansible.cfg
         run: ansible-playbook ansible/deploy.yml --syntax-check
 
       - name: Run tests
