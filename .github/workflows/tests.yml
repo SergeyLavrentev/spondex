@@ -36,7 +36,7 @@ jobs:
       - name: Install Ansible collections
         env:
           ANSIBLE_CONFIG: ansible/ansible.cfg
-        run: ansible-galaxy collection install -r ansible/requirements.yml
+        run: ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
 
       - name: Run Ansible lint
         env:
