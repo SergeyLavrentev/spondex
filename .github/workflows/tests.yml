@@ -28,6 +28,17 @@ jobs:
           UV_EXTRA: dev
         run: uv sync --frozen --extra dev
 
+      - name: Install Ansible tooling
+        run: |
+          uv tool install ansible
+          uv tool install ansible-lint
+
+      - name: Run Ansible lint
+        run: ansible-lint ansible/deploy.yml
+
+      - name: Run Ansible syntax check
+        run: ansible-playbook ansible/deploy.yml --syntax-check
+
       - name: Run tests
         run: uv run --extra dev python -m pytest --maxfail=1 --disable-warnings -q
 
