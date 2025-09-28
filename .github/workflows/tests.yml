@@ -27,7 +27,7 @@ jobs:
         run: uv sync --frozen --extra dev
 
       - name: Run tests
-        run: uv run pytest --maxfail=1 --disable-warnings -q
+        run: uv run python -m pytest --maxfail=1 --disable-warnings -q
 
   infra-smoke:
     name: Infrastructure smoke tests
