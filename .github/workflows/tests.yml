@@ -7,6 +7,9 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    env:
+      ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
+      ANSIBLE_CONFIG: ansible/ansible.cfg
 
     steps:
       - name: Checkout repository
@@ -34,21 +37,17 @@ jobs:
           uv tool install ansible-lint
 
       - name: Install Ansible collections
-        env:
-          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
-          ANSIBLE_CONFIG: ansible/ansible.cfg
-        run: ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
+        run: ansible-galaxy collection install --force -r ansible/requirements.yml -p ansible/collections
+
+      - name: Verify Ansible collections
+        run: |
+          ls -R ansible/collections || true
+          ansible-galaxy collection list --collections-path ansible/collections
 
       - name: Run Ansible lint
-        env:
-          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
-          ANSIBLE_CONFIG: ansible/ansible.cfg
         run: ansible-lint -c ansible/ansible-lint.yml ansible/deploy.yml
 
       - name: Run Ansible syntax check
-        env:
-          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
-          ANSIBLE_CONFIG: ansible/ansible.cfg
         run: ansible-playbook ansible/deploy.yml --syntax-check
 
       - name: Run tests
