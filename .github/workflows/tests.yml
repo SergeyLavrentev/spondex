@@ -33,7 +33,6 @@ jobs:
     name: Infrastructure smoke tests
     runs-on: ubuntu-latest
     needs: pytest
-    if: ${{ secrets.SSH_HOST != '' && secrets.SSH_USER != '' && secrets.SSH_PRIVATE_KEY != '' }}
     env:
       DEPLOY_APP_TOKENS: ${{ secrets['APP_TOKENS'] }}
       DEPLOY_SPOTIFY_CACHE: ${{ secrets['SPOTIFY_CACHE_CONTENT'] }}
@@ -42,27 +41,57 @@ jobs:
       DEPLOY_EXTRA_UFW_PORTS: ${{ vars.EXTRA_UFW_PORTS || '' }}
       DEPLOY_APP_PORT: ${{ vars.APP_PORT || '' }}
     steps:
+      - name: Check infrastructure secrets availability
+        id: check_secrets
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then
+              missing="${missing}${name} "
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "Required secrets are missing: $missing" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "All required secrets are present" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install uv
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Add uv to PATH
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Ansible tooling
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         run: uv tool install ansible
 
       - name: Install Ansible collections
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         run: ansible-galaxy collection install -r ansible/requirements.yml
 
       - name: Configure SSH access
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -74,17 +103,15 @@ jobs:
           ssh-keyscan -p 49384 "$SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Create dynamic inventory
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           set -euo pipefail
-          if [ -z "$SSH_HOST" ]; then
-            echo "SSH_HOST secret is required" >&2
-            exit 1
-          fi
           printf '[prod]\n%s ansible_port=49384\n' "$SSH_HOST" > /tmp/inventory.ini
 
       - name: Prepare Ansible extra vars
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         run: |
           set -euxo pipefail
           python -c "import json, os, pathlib; pathlib.Path('/tmp/extra_vars.json').write_text(json.dumps({
@@ -97,6 +124,7 @@ jobs:
           }))"
 
       - name: Test SSH connectivity to production host
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -110,9 +138,11 @@ jobs:
             'echo SSH connection successful'
 
       - name: Ansible deploy syntax check
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         run: ansible-playbook ansible/deploy.yml --syntax-check
 
       - name: Run Ansible deploy smoke tasks
+        if: ${{ steps.check_secrets.outputs.proceed == 'true' }}
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
