@@ -1,15 +1,12 @@
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/${GHCR_IMAGE_OWNER:-sergeylavrentev}/spondex:${SPONDEX_TAG:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      # Чувствительные токены подставляются Ansible-скриптом из GitHub Secret `APP_TOKENS` (см. tokens.env.example)
       - SPOTIPY_CLIENT_ID=${SPOTIPY_CLIENT_ID}
       - SPOTIPY_CLIENT_SECRET=${SPOTIPY_CLIENT_SECRET}
       - SPOTIPY_REDIRECT_URI=${SPOTIPY_REDIRECT_URI}
@@ -52,4 +49,4 @@ services:
       - "5432:5432"
 
 volumes:
-  postgres_data: 
+  postgres_data:

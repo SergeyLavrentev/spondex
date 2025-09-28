@@ -1,0 +1,190 @@
+---
+- name: Provision and deploy Spondex
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    app_root: "/opt/spondex"
+    deploy_app_port: "{{ (app_port | default('8888')) | int }}"
+    extra_ufw_ports_raw: "{{ extra_ufw_ports | default('') }}"
+    extra_ufw_ports_list: >-
+      {{ extra_ufw_ports_raw.split(',') | map('trim') | reject('equalto', '') | map('int') | list }}
+    ports_to_allow: "{{ [deploy_app_port] + extra_ufw_ports_list }}"
+    repo_root: "{{ playbook_dir | dirname }}"
+  spotify_cache_raw: "{{ spotify_cache_content | default('') }}"
+
+  pre_tasks:
+    - name: Ensure Python 3 is available
+      ansible.builtin.raw: test -x /usr/bin/python3 || (apt-get update -y && apt-get install -y python3)
+      changed_when: false
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Validate required secrets
+      ansible.builtin.assert:
+        that:
+          - app_tokens_content is defined
+          - app_tokens_content | length > 0
+        fail_msg: "Переменная app_tokens_content должна быть передана (секрет с токенами)."
+
+  tasks:
+    - name: Smoke | Display target host
+      ansible.builtin.debug:
+        msg: "Smoke deploy check on {{ inventory_hostname }}"
+      tags: ['smoke']
+
+    - name: Smoke | Verify privileged command execution
+      ansible.builtin.command:
+        cmd: whoami
+      register: smoke_whoami
+      changed_when: false
+      tags: ['smoke']
+
+    - name: Smoke | Assert root privileges available
+      ansible.builtin.assert:
+        that:
+          - smoke_whoami.stdout == 'root'
+        fail_msg: "Smoke test requires ability to execute commands as root."
+      tags: ['smoke']
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - rsync
+        state: present
+        update_cache: true
+
+    - name: Ensure directory for apt keyrings exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Docker repository key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Ensure Docker apt repository is configured
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: [deb]
+        uris: https://download.docker.com/linux/debian
+        suites: "{{ ansible_facts['lsb']['codename'] }}"
+        components: [stable]
+        signed_by: /etc/apt/keyrings/docker.asc
+        state: present
+
+    - name: Install Docker engine and compose plugin
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Ensure docker service is enabled and running
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Check UFW status
+      ansible.builtin.command: ufw status
+      register: ufw_status
+      failed_when: false
+      changed_when: false
+
+    - name: Allow application ports in UFW
+      when: "'Status: active' in ufw_status.stdout"
+      loop: "{{ ports_to_allow }}"
+      loop_control:
+        label: "{{ item }}"
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+
+    - name: Ensure application directory exists
+      ansible.builtin.file:
+        path: "{{ app_root }}"
+        state: directory
+        mode: '0755'
+
+    - name: Synchronize project sources to server
+      ansible.posix.synchronize:
+        src: "{{ repo_root }}/"
+        dest: "{{ app_root }}"
+        delete: true
+        archive: true
+        checksum: true
+        recursive: true
+        rsync_path: "sudo rsync"
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=.github"
+          - "--exclude=ansible"
+          - "--exclude=.venv"
+          - "--exclude=.pytest_cache"
+          - "--exclude=.cache"
+          - "--exclude=*.pyc"
+          - "--exclude=.env"
+      delegate_to: localhost
+      become: false
+
+    - name: Render runtime environment file
+      ansible.builtin.template:
+        src: env.j2
+        dest: "{{ app_root }}/.env"
+        mode: '0600'
+
+    - name: Ensure Spotify cache directory exists
+      ansible.builtin.file:
+        path: "{{ app_root }}/.cache"
+        state: directory
+        mode: '0700'
+
+    - name: Write Spotify cache file if provided
+      when: spotify_cache_raw | length > 0
+      ansible.builtin.copy:
+        content: "{{ spotify_cache_raw }}"
+        dest: "{{ app_root }}/.cache/.cache"
+        mode: '0600'
+
+    - name: Log in to GHCR registry when credentials are available
+      when: (ghcr_username | default('')) | length > 0 and (ghcr_pat | default('')) | length > 0
+      community.docker.docker_login:
+        registry_url: ghcr.io
+        username: "{{ ghcr_username }}"
+        password: "{{ ghcr_pat }}"
+
+    - name: Pull latest images and build project
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml pull
+        chdir: "{{ app_root }}"
+
+    - name: Apply docker compose stack
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml up -d --remove-orphans
+        chdir: "{{ app_root }}"
+
+    - name: Show running containers
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml ps
+        chdir: "{{ app_root }}"
+      register: compose_ps
+      changed_when: false
+
+    - name: Display running containers
+      ansible.builtin.debug:
+        var: compose_ps.stdout_lines
