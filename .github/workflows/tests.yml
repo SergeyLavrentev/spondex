@@ -35,19 +35,19 @@ jobs:
 
       - name: Install Ansible collections
         env:
-          ANSIBLE_COLLECTIONS_PATH: ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
+          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
           ANSIBLE_CONFIG: ansible/ansible.cfg
         run: ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
 
       - name: Run Ansible lint
         env:
-          ANSIBLE_COLLECTIONS_PATH: ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
+          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
           ANSIBLE_CONFIG: ansible/ansible.cfg
         run: ansible-lint -c ansible/ansible-lint.yml ansible/deploy.yml
 
       - name: Run Ansible syntax check
         env:
-          ANSIBLE_COLLECTIONS_PATH: ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
+          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
           ANSIBLE_CONFIG: ansible/ansible.cfg
         run: ansible-playbook ansible/deploy.yml --syntax-check
 
