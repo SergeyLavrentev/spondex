@@ -97,8 +97,8 @@ def check_and_fix_spotify_cache():
                 logger.info("Удаляем некорректный кэш файл")
                 try:
                     os.remove(cache_path)
-                except:
-                    pass
+                except OSError as cleanup_error:
+                    logger.warning("Не удалось удалить некорректный кэш Spotify: %s", cleanup_error)
         except Exception as e:
             logger.error(f"Ошибка при проверке кэш файла: {e}")
     else:

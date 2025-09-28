@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar
+from typing import Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from models import FavoriteAlbum, FavoriteArtist
 

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
-import os
-import sys
-import time
-import traceback
 import json
+import os
+import shutil
+import sys
+import traceback
+
 from dotenv import load_dotenv
+
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-import shutil
 
 def main():
     # Загружаем переменные окружения

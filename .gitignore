@@ -163,3 +163,4 @@ cython_debug/
 ### DB
 music_sync.db
 .aider*
+tokens.env

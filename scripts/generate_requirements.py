@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import pathlib
-import sys
 from typing import Iterable, List
 
 try:  # Python 3.11+
