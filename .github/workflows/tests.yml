@@ -33,6 +33,9 @@ jobs:
           uv tool install ansible
           uv tool install ansible-lint
 
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+
       - name: Run Ansible lint
         run: ansible-lint ansible/deploy.yml
 
