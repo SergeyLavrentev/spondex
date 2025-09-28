@@ -12,7 +12,7 @@
       {{ extra_ufw_ports_raw.split(',') | map('trim') | reject('equalto', '') | map('int') | list }}
     ports_to_allow: "{{ [deploy_app_port] + extra_ufw_ports_list }}"
     repo_root: "{{ playbook_dir | dirname }}"
-  spotify_cache_raw: "{{ spotify_cache_content | default('') }}"
+    spotify_cache_raw: "{{ spotify_cache_content | default('') }}"
 
   pre_tasks:
     - name: Ensure Python 3 is available
