@@ -3,7 +3,7 @@ name = "spondex"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
 "aiofiles==24.1.0",
 "aiohappyeyeballs==2.4.0",
@@ -25,7 +25,7 @@ dependencies = [
 "uv==0.4.10",
 "yandex-music==2.2.0",
 "yarl==1.11.1",
-"psycopg2-binary==2.9.10",
+"psycopg[binary]==3.2.2",
 ]
 
 [project.optional-dependencies]

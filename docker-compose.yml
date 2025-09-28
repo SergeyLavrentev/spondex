@@ -24,7 +24,7 @@ services:
         source: ./.cache
         target: /app/.cache
     ports:
-      - "8888:8888"
+      - "127.0.0.1:8888:8888"
     command:
       - --sync-playlists
       - --sync-favorite-albums
@@ -49,7 +49,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./src/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
 volumes:
   postgres_data: 

@@ -1,14 +1,14 @@
 import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-import psycopg2
-from psycopg2.extras import DictCursor
+import psycopg
+from psycopg.rows import dict_row
 
 
 class DatabaseManager:
     def __init__(self, connection_params: dict):
-        self.conn = psycopg2.connect(**connection_params)
-        self.cursor = self.conn.cursor(cursor_factory=DictCursor)
+        self.conn = psycopg.connect(**connection_params)
+        self.cursor = self.conn.cursor(row_factory=dict_row)
         self._create_tables()
 
     def _create_tables(self):
@@ -21,7 +21,7 @@ class DatabaseManager:
             (service,)
         )
         result = self.cursor.fetchone()
-        return result[0] if result else None
+        return result["last_sync"] if result else None
 
     def update_last_sync_time(self, service: str, sync_time: datetime.datetime):
         self.cursor.execute(
@@ -65,7 +65,7 @@ class DatabaseManager:
             (yandex_id,),
         )
         result = self.cursor.fetchone()
-        return result[0] if result else None
+        return result["spotify_id"] if result else None
 
     def get_yandex_id(self, spotify_id: str) -> Optional[str]:
         self.cursor.execute(
@@ -73,7 +73,7 @@ class DatabaseManager:
             (spotify_id,),
         )
         result = self.cursor.fetchone()
-        return result[0] if result else None
+        return result["yandex_id"] if result else None
 
     def add_undiscovered_track(self, service: str, artist: str, title: str):
         self.cursor.execute(
@@ -118,7 +118,9 @@ class DatabaseManager:
                 (entity_id,),
             )
         result = self.cursor.fetchone()
-        return result[0] if result else None
+        if not result:
+            return None
+        return result["spotify_id"] if service == "yandex" else result["yandex_id"]
 
     def find_album_link_by_key(self, normalized_key: str) -> Optional[Tuple[str, str]]:
         self.cursor.execute(
@@ -168,7 +170,9 @@ class DatabaseManager:
                 (entity_id,),
             )
         result = self.cursor.fetchone()
-        return result[0] if result else None
+        if not result:
+            return None
+        return result["spotify_id"] if service == "yandex" else result["yandex_id"]
 
     def find_artist_link_by_key(self, normalized_key: str) -> Optional[Tuple[str, str]]:
         self.cursor.execute(
@@ -209,7 +213,7 @@ class DatabaseManager:
             """,
             (service, playlist_id, name, owner, last_synced),
         )
-        playlist_pk = self.cursor.fetchone()[0]
+        playlist_pk = self.cursor.fetchone()["id"]
         self.conn.commit()
         return playlist_pk
 

@@ -1,5 +1,5 @@
 import sqlite3
-import psycopg2
+import psycopg
 import os
 from dotenv import load_dotenv
 
@@ -16,7 +16,7 @@ def migrate_data():
         "host": os.getenv("POSTGRES_HOST", "localhost"),
         "port": os.getenv("POSTGRES_PORT", "5432")
     }
-    pg_conn = psycopg2.connect(**pg_params)
+    pg_conn = psycopg.connect(**pg_params)
     pg_cur = pg_conn.cursor()
 
     sqllite_history_table = "sync_status"
