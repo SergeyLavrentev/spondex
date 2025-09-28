@@ -37,9 +37,13 @@ jobs:
         run: ansible-galaxy collection install -r ansible/requirements.yml
 
       - name: Run Ansible lint
+        env:
+          ANSIBLE_COLLECTIONS_PATHS: ~/.ansible/collections:/usr/share/ansible/collections
         run: ansible-lint ansible/deploy.yml
 
       - name: Run Ansible syntax check
+        env:
+          ANSIBLE_COLLECTIONS_PATHS: ~/.ansible/collections:/usr/share/ansible/collections
         run: ansible-playbook ansible/deploy.yml --syntax-check
 
       - name: Run tests
