@@ -7,12 +7,18 @@
   vars:
     app_root: "/opt/spondex"
     deploy_app_port: "{{ (app_port | default('8888')) | int }}"
-    extra_ufw_ports_raw: "{{ extra_ufw_ports | default('') }}"
-    extra_ufw_ports_list: >-
-      {{ extra_ufw_ports_raw.split(',') | map('trim') | reject('equalto', '') | map('int') | list }}
-    ports_to_allow: "{{ [deploy_app_port] + extra_ufw_ports_list }}"
     repo_root: "{{ playbook_dir | dirname }}"
-    spotify_cache_raw: "{{ spotify_cache_content | default('') }}"
+    local_app_tokens_path: "{{ repo_root }}/.env"
+    local_spotify_cache_path: "{{ repo_root }}/.cache"
+    is_ci_environment: "{{ (lookup('env', 'CI') | default('')) | length > 0 }}"
+    ghcr_owner: "{{ ghcr_image_owner | default('sergeylavrentev') }}"
+    ghcr_tag: "{{ ghcr_image_tag | default('latest') }}"
+    registry_image: "ghcr.io/{{ ghcr_owner }}/spondex:{{ ghcr_tag }}"
+    local_image_name: "spondex-local"
+    local_image_tag: "latest"
+    local_image_full: "{{ local_image_name }}:{{ local_image_tag }}"
+    remote_image_archive: "/tmp/spondex-image.tar"
+    deploy_image: "{{ local_image_full if not is_ci_environment else registry_image }}"
 
   pre_tasks:
     - name: Ensure Python 3 is available
@@ -22,10 +28,52 @@
     - name: Gather facts
       ansible.builtin.setup:
 
+    - name: Initialize secret variable
+      ansible.builtin.set_fact:
+        app_tokens_content: "{{ app_tokens_content | default('') }}"
+
+    - name: Initialize Spotify cache content variable
+      ansible.builtin.set_fact:
+        spotify_cache_content: "{{ spotify_cache_content | default('') }}"
+
+    - name: Check local tokens file presence
+      ansible.builtin.stat:
+        path: "{{ local_app_tokens_path }}"
+      delegate_to: localhost
+      become: false
+      register: local_tokens_stat
+      run_once: true
+
+    - name: Load local tokens fallback when available
+      ansible.builtin.set_fact:
+        app_tokens_content: "{{ lookup('file', local_app_tokens_path) }}"
+      when:
+        - not is_ci_environment
+        - (app_tokens_content | length) == 0
+        - local_tokens_stat.stat.exists
+
+    - name: Check local Spotify cache presence
+      ansible.builtin.stat:
+        path: "{{ local_spotify_cache_path }}"
+      delegate_to: localhost
+      become: false
+      register: local_cache_stat
+      run_once: true
+
+    - name: Remember Spotify cache availability
+      ansible.builtin.set_fact:
+        spotify_cache_available: "{{ (local_cache_stat.stat.exists | default(false)) | bool }}"
+
+    - name: Warn when Spotify cache is missing locally
+      ansible.builtin.debug:
+        msg: "Локальный файл Spotify cache не найден. Запуск потребует интерактивной авторизации."
+      when:
+        - not is_ci_environment
+        - not local_cache_stat.stat.exists
+
     - name: Validate required secrets
       ansible.builtin.assert:
         that:
-          - app_tokens_content is defined
           - app_tokens_content | length > 0
         fail_msg: "Переменная app_tokens_content должна быть передана (секрет с токенами)."
 
@@ -99,22 +147,6 @@
         state: started
         enabled: true
 
-    - name: Check UFW status
-      ansible.builtin.command: ufw status
-      register: ufw_status
-      failed_when: false
-      changed_when: false
-
-    - name: Allow application ports in UFW
-      when: "'Status: active' in ufw_status.stdout"
-      loop: "{{ ports_to_allow }}"
-      loop_control:
-        label: "{{ item }}"
-      community.general.ufw:
-        rule: allow
-        port: "{{ item }}"
-        proto: tcp
-
     - name: Ensure application directory exists
       ansible.builtin.file:
         path: "{{ app_root }}"
@@ -148,21 +180,92 @@
         dest: "{{ app_root }}/.env"
         mode: '0600'
 
-    - name: Ensure Spotify cache directory exists
+    - name: Ensure Spotify cache file absent when not provided
+      when:
+        - (spotify_cache_available | default(false)) | bool == false
+        - (spotify_cache_content | length) == 0
       ansible.builtin.file:
         path: "{{ app_root }}/.cache"
-        state: directory
-        mode: '0700'
+        state: absent
 
-    - name: Write Spotify cache file if provided
-      when: spotify_cache_raw | length > 0
+    - name: Copy Spotify cache file from local repository
+      when:
+        - not is_ci_environment
+        - (spotify_cache_available | default(false)) | bool
       ansible.builtin.copy:
-        content: "{{ spotify_cache_raw }}"
-        dest: "{{ app_root }}/.cache/.cache"
+        src: "{{ local_spotify_cache_path }}"
+        dest: "{{ app_root }}/.cache"
         mode: '0600'
 
+    - name: Write Spotify cache file from provided content
+      when:
+        - is_ci_environment
+        - (spotify_cache_content | length) > 0
+      ansible.builtin.copy:
+        content: "{{ spotify_cache_content }}"
+        dest: "{{ app_root }}/.cache"
+        mode: '0600'
+
+    - name: Check Spotify cache file on server
+      ansible.builtin.stat:
+        path: "{{ app_root }}/.cache"
+      register: server_cache_stat
+
+    - name: Build deployment image locally when not in CI
+      ansible.builtin.command:
+        cmd: docker buildx build --platform linux/amd64 -t {{ deploy_image }} --load .
+        chdir: "{{ repo_root }}"
+      delegate_to: localhost
+      become: false
+      when: not is_ci_environment
+
+    - name: Create temporary archive for deployment image
+      ansible.builtin.tempfile:
+        state: file
+        suffix: ".tar"
+      register: local_image_archive
+      delegate_to: localhost
+      become: false
+      when: not is_ci_environment
+
+    - name: Save deployment image to archive
+      ansible.builtin.command:
+        cmd: docker save -o {{ local_image_archive.path }} {{ deploy_image }}
+      delegate_to: localhost
+      become: false
+      when: not is_ci_environment
+
+    - name: Upload deployment image archive to target host
+      ansible.builtin.copy:
+        src: "{{ local_image_archive.path }}"
+        dest: "{{ remote_image_archive }}"
+        mode: '0600'
+      when: not is_ci_environment
+
+    - name: Load deployment image on target host
+      ansible.builtin.command:
+        cmd: docker load -i {{ remote_image_archive }}
+      when: not is_ci_environment
+
+    - name: Remove deployment image archive from target host
+      ansible.builtin.file:
+        path: "{{ remote_image_archive }}"
+        state: absent
+      when: not is_ci_environment
+
+    - name: Cleanup local deployment image archive
+      ansible.builtin.file:
+        path: "{{ local_image_archive.path }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      when: not is_ci_environment and local_image_archive is defined
+
     - name: Log in to GHCR registry when credentials are available
-      when: (ghcr_username | default('')) | length > 0 and (ghcr_pat | default('')) | length > 0
+      when:
+        - is_ci_environment
+        - (ghcr_username | default('')) | length > 0
+        - (ghcr_pat | default('')) | length > 0
       community.docker.docker_login:
         registry_url: ghcr.io
         username: "{{ ghcr_username }}"
@@ -172,10 +275,25 @@
       ansible.builtin.command:
         cmd: docker compose -f docker-compose.prod.yml pull
         chdir: "{{ app_root }}"
+      when: is_ci_environment
 
     - name: Apply docker compose stack
       ansible.builtin.command:
         cmd: docker compose -f docker-compose.prod.yml up -d --remove-orphans
+        chdir: "{{ app_root }}"
+
+    - name: Copy Spotify cache into application container
+      when:
+        - (server_cache_stat.stat.exists | default(false)) | bool
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml cp ./.cache app:/app/.cache
+        chdir: "{{ app_root }}"
+
+    - name: Restart application container to apply Spotify cache
+      when:
+        - (server_cache_stat.stat.exists | default(false)) | bool
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml restart app
         chdir: "{{ app_root }}"
 
     - name: Show running containers

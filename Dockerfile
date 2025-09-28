@@ -23,4 +23,4 @@ COPY . .
 EXPOSE 8888
 
 ENTRYPOINT ["python", "src/main.py"]
-CMD []
+CMD ["--sync-playlists", "--sync-favorite-albums", "--sync-favorite-artists", "--sleep", "300"]

@@ -20,12 +20,12 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
     volumes:
-      - ./.cache:/app/.cache
+      - type: bind
+        source: ./.cache
+        target: /app/.cache
     ports:
       - "8888:8888"
     command:
-      - python
-      - src/main.py
       - --sync-playlists
       - --sync-favorite-albums
       - --sync-favorite-artists

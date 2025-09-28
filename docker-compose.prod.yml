@@ -1,7 +1,7 @@
 
 services:
   app:
-    image: ghcr.io/${GHCR_IMAGE_OWNER:-sergeylavrentev}/spondex:${SPONDEX_TAG:-latest}
+    image: ${SPONDEX_IMAGE:-ghcr.io/sergeylavrentev/spondex:latest}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -16,13 +16,9 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-    volumes:
-      - ./.cache:/app/.cache
     ports:
       - "8888:8888"
     command:
-      - python
-      - src/main.py
       - --sync-playlists
       - --sync-favorite-albums
       - --sync-favorite-artists

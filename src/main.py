@@ -5,6 +5,7 @@ import logging
 import os
 import random
 import time
+from pathlib import Path
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple
 
 import spotipy
@@ -65,44 +66,48 @@ def _join_artist_names(artists: Optional[Iterable[Any]]) -> Optional[str]:
 
 def check_and_fix_spotify_cache():
     """Проверяет и исправляет кэш файл Spotify если он некорректный"""
-    cache_path = "./.cache"
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "r") as f:
-                content = f.read().strip()
-                
-            # Проверяем, является ли это валидным JSON
-            json.loads(content)
-            logger.info("Кэш файл Spotify корректен")
-            
-        except json.JSONDecodeError:
-            logger.warning("Обнаружен некорректный кэш файл Spotify, попытка исправления...")
-            try:
-                # Пытаемся исправить, если это Python dict строка
-                if content.startswith("{'") and content.endswith("'}"):
-                    # Преобразуем Python dict строку в валидный JSON
-                    content_fixed = content.replace("'", '"')
-                    # Проверяем, что теперь это валидный JSON
-                    parsed = json.loads(content_fixed)
-                    
-                    # Перезаписываем файл с корректным JSON
-                    with open(cache_path, "w") as f:
-                        json.dump(parsed, f)
-                    logger.info("Кэш файл Spotify успешно исправлен")
-                else:
-                    logger.error("Не удалось исправить кэш файл автоматически. Удаляем некорректный файл.")
-                    os.remove(cache_path)
-            except Exception as e:
-                logger.error(f"Ошибка при исправлении кэш файла: {e}")
-                logger.info("Удаляем некорректный кэш файл")
-                try:
-                    os.remove(cache_path)
-                except OSError as cleanup_error:
-                    logger.warning("Не удалось удалить некорректный кэш Spotify: %s", cleanup_error)
-        except Exception as e:
-            logger.error(f"Ошибка при проверке кэш файла: {e}")
+    cache_root = Path("./.cache")
+    if cache_root.is_dir():
+        cache_file = cache_root / ".cache"
     else:
+        cache_file = cache_root
+
+    if not cache_file.exists():
         logger.warning("Кэш файл Spotify не найден. Убедитесь, что вы выполнили аутентификацию.")
+        return
+
+    try:
+        content = cache_file.read_text().strip()
+
+        # Проверяем, является ли это валидным JSON
+        json.loads(content)
+        logger.info("Кэш файл Spotify корректен")
+
+    except json.JSONDecodeError:
+        logger.warning("Обнаружен некорректный кэш файл Spotify, попытка исправления...")
+        try:
+            # Пытаемся исправить, если это Python dict строка
+            if content.startswith("{'") and content.endswith("'}"):
+                # Преобразуем Python dict строку в валидный JSON
+                content_fixed = content.replace("'", '"')
+                # Проверяем, что теперь это валидный JSON
+                parsed = json.loads(content_fixed)
+
+                # Перезаписываем файл с корректным JSON
+                cache_file.write_text(json.dumps(parsed))
+                logger.info("Кэш файл Spotify успешно исправлен")
+            else:
+                logger.error("Не удалось исправить кэш файл автоматически. Удаляем некорректный файл.")
+                cache_file.unlink(missing_ok=True)
+        except Exception as e:
+            logger.error(f"Ошибка при исправлении кэш файла: {e}")
+            logger.info("Удаляем некорректный кэш файл")
+            try:
+                cache_file.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                logger.warning("Не удалось удалить некорректный кэш Spotify: %s", cleanup_error)
+    except Exception as e:
+        logger.error(f"Ошибка при проверке кэш файла: {e}")
 
 
 class YandexMusic(MusicService):
