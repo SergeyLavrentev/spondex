@@ -11,7 +11,7 @@ from typing import List
 from pathlib import Path
 
 from monitoring.checks import Alert, CheckContext, run_checks
-from monitoring.config import Config, load_config
+from monitoring.config import load_config
 from monitoring.notifier import send_alert_email
 from monitoring.storage import Metric, StateStore
 

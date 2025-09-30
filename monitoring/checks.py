@@ -8,9 +8,9 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterable, List
+from typing import List
 
-from .config import Config, DiskDevice
+from .config import Config
 from .storage import Metric, StateStore
 
 
