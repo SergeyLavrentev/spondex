@@ -23,6 +23,8 @@
     creates: "{{ monitor_uv_binary }}"
   environment:
     UV_INSTALL_DIR: "{{ monitor_uv_install_dir }}"
+    UV_INSTALL_VERSION: "{{ monitor_uv_version }}"
+    UV_VERSION: "{{ monitor_uv_version }}"
 
 - name: Check installed uv version
   ansible.builtin.command:
@@ -35,8 +37,8 @@
 
 - name: Ensure uv CLI is at required version
   ansible.builtin.command:
-    cmd: "{{ monitor_uv_binary }} self update --version {{ monitor_uv_version }}"
-  when: monitor_uv_check.stdout is not search(' {{ monitor_uv_version }}')
+    cmd: "{{ monitor_uv_binary }} self update {{ monitor_uv_version }}"
+  when: (monitor_uv_version | length > 0) and (monitor_uv_check.rc != 0 or monitor_uv_version not in monitor_uv_check.stdout)
   environment:
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
 
