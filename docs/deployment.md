@@ -83,13 +83,21 @@ ssh -p 49384 -i ~/.ssh/spondex_deploy <user>@<host>
 
 ## Запуск пайплайна
 
-Workflow `Build and Publish Docker Image` (`.github/workflows/docker-image.yml`) собирает образ и выкладывает его в GitHub Container Registry (`ghcr.io/<owner>/spondex`). Он запускается при каждом push в `main` и помечает образ тегами `latest`, именем ветки и SHA.
+Workflow `Tests` (`.github/workflows/tests.yml`) запускается при каждом push в любую ветку и при открытии/обновлении PR. Он выполняет:
 
-Workflow `Deploy to Production` (`.github/workflows/deploy.yml`) выполняется **при любом push** в репозиторий. Он:
+1. Тесты Python (pytest), линтинг Ansible, синтаксическую проверку плейбуков.
+2. Smoke-тесты инфраструктуры: проверка SSH-доступа, синтаксиса деплоя.
+3. **Автоматический деплой на продакшен** — только при push в ветку `main` и успешном прохождении всех шагов выше. Деплой использует Ansible для синхронизации кода, обновления образов и перезапуска сервисов.
 
-1. Проверяет репозиторий и устанавливает Ansible.
-2. Настраивает SSH (используя секреты `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`), формирует inventory с портом `49384`.
-3. Формирует файл с дополнительными переменными и запускает `ansible/deploy.yml`, который тянет образ из GHCR и разворачивает `docker-compose.prod.yml`.
+Workflow `Build and Publish Docker Image` (`.github/workflows/docker-image.yml`) собирает образ и публикует в GHCR при push в `main`.
+
+Workflow `Deploy to Production` (`.github/workflows/deploy.yml`) теперь запускается только вручную (workflow_dispatch) для экстренных случаев или ручного деплоя без тестов.
+
+### Ручной запуск
+
+- **Тесты и деплой**: Push в ветку `main` — автоматически запустит полный пайплайн.
+- **Только тесты**: Откройте PR или push в feature-ветку — запустит тесты без деплоя.
+- **Ручной деплой**: В GitHub Actions выберите workflow "Deploy to Production" и нажмите "Run workflow" — деплой без тестов (используйте осторожно).
 
 ### Ручной запуск
 
