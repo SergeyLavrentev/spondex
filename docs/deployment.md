@@ -104,10 +104,11 @@ ansible-playbook ansible/deploy.yml \
   -i /tmp/inventory.ini \
   --limit prod \
   -u <user> \
-  --private-key ~/.ssh/spondex_deploy
+  --private-key ~/.ssh/spondex_deploy \
+  --extra-vars "is_ci_environment=true"
 ```
 
-Плейбук автоматически прочитает содержимое `.env` и `.cache`, если они лежат рядом с репозиторием. При необходимости можно переопределить путь к образу, портам и т.д. через `--extra-vars`.
+Плейбук автоматически прочитает содержимое `.env` и `.cache`, если они лежат рядом с репозиторием. Флаг `is_ci_environment=true` отключает локальную сборку Docker-образа и заставляет плейбук тянуть контейнер из GHCR (удобно при запуске с macOS, где `docker buildx --load` может упасть на стадии `uv sync`). При необходимости можно переопределить путь к образу, портам и т.д. через `--extra-vars`.
 
 По умолчанию плейбук синхронизирует весь проект в `/opt/spondex`. При необходимости можно переопределить переменную `app_root` через `--extra-vars`.
 

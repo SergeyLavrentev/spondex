@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import List
 
 from pathlib import Path
@@ -31,6 +31,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _format_metric_value(metric: Metric) -> str:
+    value = metric.value
+    name = metric.name
+    if name.endswith("_percent"):
+        return f"{value}%"
+    if name.endswith("_status"):
+        return value
+    if name.endswith("_ms"):
+        return f"{value} ms"
+    return value
+
+
 def format_report(now: datetime, alerts: List[Alert], metrics: List[Metric]) -> str:
     lines = [f"Spondex monitoring report at {now.isoformat()}", ""]
     if alerts:
@@ -42,7 +54,7 @@ def format_report(now: datetime, alerts: List[Alert], metrics: List[Metric]) -> 
     lines.append("")
     lines.append("Recent metrics:")
     for metric in metrics:
-        lines.append(f"- {metric.name} = {metric.value:.3f} at {metric.recorded_at.isoformat()}")
+        lines.append(f"- {metric.name} = {_format_metric_value(metric)} at {metric.recorded_at.isoformat()}")
     return "\n".join(lines)
 
 
@@ -59,7 +71,7 @@ def main() -> int:
     else:
         config.enable_email = False
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     store = StateStore(config.state_path)
     ctx = CheckContext(config=config, store=store, now=now)
 
@@ -81,7 +93,6 @@ def main() -> int:
         except Exception as exc:  # pragma: no cover
             print(f"Failed to send email: {exc}", file=sys.stderr)
             return 2
-        return 1
     return 0
 
 

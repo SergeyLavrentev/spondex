@@ -13,7 +13,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    value REAL,
+    value TEXT,
     recorded_at TIMESTAMP NOT NULL
 );
 
@@ -30,8 +30,16 @@ CREATE INDEX IF NOT EXISTS idx_metrics_name_time
 @dataclass
 class Metric:
     name: str
-    value: float
+    value: str
     recorded_at: datetime
+
+    @classmethod
+    def from_value(cls, name: str, value: object, recorded_at: datetime) -> "Metric":
+        if isinstance(value, float):
+            normalized = f"{int(round(value))}"
+        else:
+            normalized = str(value)
+        return cls(name=name, value=normalized, recorded_at=recorded_at)
 
 
 class StateStore:
@@ -40,6 +48,7 @@ class StateStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.path) as conn:
             conn.executescript(SCHEMA)
+            self._migrate_metrics_value_to_text(conn)
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -50,7 +59,7 @@ class StateStore:
             conn.close()
 
     def save_metrics(self, metrics: Iterable[Metric]) -> None:
-        items = [(m.name, m.value, m.recorded_at.isoformat()) for m in metrics]
+        items = [(m.name, str(m.value), m.recorded_at.isoformat()) for m in metrics]
         with self.connection() as conn:
             conn.executemany(
                 "INSERT INTO metrics (name, value, recorded_at) VALUES (?, ?, ?)",
@@ -70,7 +79,31 @@ class StateStore:
                 (name, since.isoformat()),
             )
             rows = cursor.fetchall()
-        return [Metric(row[0], float(row[1]), datetime.fromisoformat(row[2])) for row in rows]
+        return [Metric(row[0], str(row[1]), datetime.fromisoformat(row[2])) for row in rows]
+
+    @staticmethod
+    def _migrate_metrics_value_to_text(conn: sqlite3.Connection) -> None:
+        cursor = conn.execute("PRAGMA table_info(metrics)")
+        columns = {row[1]: row[2] for row in cursor.fetchall()}
+        value_type = columns.get("value")
+        if value_type and value_type.upper() != "TEXT":
+            conn.executescript(
+                """
+                ALTER TABLE metrics RENAME TO metrics_old;
+                CREATE TABLE metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    value TEXT,
+                    recorded_at TIMESTAMP NOT NULL
+                );
+                INSERT INTO metrics (name, value, recorded_at)
+                SELECT name, CAST(value AS TEXT), recorded_at FROM metrics_old;
+                DROP TABLE metrics_old;
+                CREATE INDEX IF NOT EXISTS idx_metrics_name_time
+                    ON metrics (name, recorded_at);
+                """
+            )
+            conn.commit()
 
     def get_state(self, key: str, default: Optional[str] = None) -> Optional[str]:
         with self.connection() as conn:

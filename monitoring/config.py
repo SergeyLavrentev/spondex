@@ -40,6 +40,15 @@ class DatabaseCheck:
 
 
 @dataclass
+class DiskUsageCheck:
+    name: str
+    path: Path
+    warn_percent: int = 85
+    critical_percent: int = 95
+    min_free_gb: int = 2
+
+
+@dataclass
 class LogCheck:
     path: Path
     pattern: str = "Traceback"
@@ -64,6 +73,7 @@ class Config:
     db_check: DatabaseCheck = field(default_factory=lambda: DatabaseCheck(container_name="spondex-postgres-1"))
     log_checks: List[LogCheck] = field(default_factory=list)
     disk_devices: List[DiskDevice] = field(default_factory=list)
+    disk_usage_checks: List[DiskUsageCheck] = field(default_factory=lambda: [DiskUsageCheck(name="root", path=Path("/"))])
     notification: NotificationConfig = field(
         default_factory=lambda: NotificationConfig(mail_to=["root@localhost"])
     )
@@ -110,6 +120,21 @@ def _coerce_docker_checks(raw: Iterable[dict]) -> List[DockerCheck]:
     return checks
 
 
+def _coerce_disk_usage(raw: Iterable[dict]) -> List[DiskUsageCheck]:
+    checks: List[DiskUsageCheck] = []
+    for item in raw:
+        checks.append(
+            DiskUsageCheck(
+                name=item["name"],
+                path=Path(item.get("path", "/")),
+                warn_percent=int(item.get("warn_percent", 85)),
+                critical_percent=int(item.get("critical_percent", 95)),
+                min_free_gb=int(item.get("min_free_gb", 2)),
+            )
+        )
+    return checks
+
+
 def load_config(path: Optional[Path] = None) -> Config:
     """Load configuration from YAML or defaults when not provided."""
 
@@ -142,6 +167,7 @@ def load_config(path: Optional[Path] = None) -> Config:
         db_check=DatabaseCheck(**data.get("db_check", {"container_name": "spondex-postgres-1"})),
         log_checks=_coerce_log_checks(data.get("log_checks", [])),
         disk_devices=_coerce_disk_devices(data.get("disk_devices", [])),
+    disk_usage_checks=_coerce_disk_usage(data.get("disk_usage_paths", [])) or [DiskUsageCheck(name="root", path=Path("/"))],
         notification=notification,
         compose_file=Path(data["compose_file"]) if data.get("compose_file") else Path("/opt/spondex/docker-compose.prod.yml"),
         enable_email=bool(data.get("enable_email", True)),
@@ -150,4 +176,4 @@ def load_config(path: Optional[Path] = None) -> Config:
     return cfg
 
 
-__all__ = ["Config", "load_config", "DiskDevice", "DockerCheck", "DatabaseCheck", "LogCheck", "NotificationConfig"]
+__all__ = ["Config", "load_config", "DiskDevice", "DockerCheck", "DatabaseCheck", "DiskUsageCheck", "LogCheck", "NotificationConfig"]

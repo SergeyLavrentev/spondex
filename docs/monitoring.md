@@ -35,6 +35,10 @@ Key checks implemented:
 - **Disk IOPS**: computes per-device IOPS (normalised to a per-minute rate)
   from `/proc/diskstats` deltas between runs and alerts when the configured
   threshold is exceeded.
+- **Disk space**: tracks used percentage and free GiB for configured mount
+  points, raises warnings when the warn threshold is exceeded, and escalates to
+  a critical alert when the remaining space drops below the configured
+  minimum.
 
 All metrics and state variables (log offsets, disk stats snapshot, last boot
 stamp, etc.) are stored under the SQLite database declared in the configuration
@@ -50,6 +54,8 @@ overridden per environment. Notable options:
 - `monitor_app_containers`: list of Docker containers that must stay running.
 - `monitor_disks`: devices and IOPS thresholds (`sysstat` is required so that
   `/proc/diskstats` values are meaningful).
+- `monitor_disk_usage`: mount points to watch, percentage thresholds and the
+  minimal free space (GiB) before triggering alerts.
 - `monitor_log_files`: log paths and error patterns.
 - `monitor_mail_to`, `monitor_mail_from`, `monitor_mail_subject`: e-mail
   recipients and message metadata.
@@ -127,9 +133,7 @@ sudo systemctl start spondex-monitor.service
   tests):
 
   ```bash
-  sudo -u root /usr/bin/env python3 \
-    /opt/spondex/monitoring/monitor.py \
-    --config /opt/spondex/monitoring/config.yaml
+  sudo /opt/spondex/monitoring/monitor.py --config /opt/spondex/monitoring/config.yaml
   ```
 
 - Inspect the SQLite store to confirm the timer is writing samples:
@@ -164,7 +168,7 @@ will pick up the new thresholds automatically.
 3. Save the file and optionally run a dry check to validate parsing:
 
    ```bash
-   sudo /usr/bin/env python3 /opt/spondex/monitoring/monitor.py --config /opt/spondex/monitoring/config.yaml
+  sudo /opt/spondex/monitoring/monitor.py --config /opt/spondex/monitoring/config.yaml
    ```
 
 4. The systemd timer will execute the script with the new settings on the next
@@ -192,9 +196,11 @@ Run the script locally with:
 python -m monitoring.monitor --config monitoring/config.sample.yaml
 ```
 
-This prints the collected metrics and any alerts without attempting to send
-mail. Unit tests live in `tests/test_monitoring_checks.py` and can be executed
-via `pytest`.
+The command prints the collected metrics and any alerts without attempting to
+send mail. On the production host the script is executable, so you can run it
+directly as `sudo /opt/spondex/monitoring/monitor.py` to trigger an ad-hoc
+collection without remembering any UV-specific incantations. Unit tests live in
+`tests/test_monitoring_checks.py` and can be executed via `pytest`.
 
 For integration coverage, Molecule сценарий роли находится в
 `ansible/roles/monitoring/molecule/default`. Локально запускайте его в отдельном

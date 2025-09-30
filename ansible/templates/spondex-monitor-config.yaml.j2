@@ -59,6 +59,23 @@ disk_devices:
     include_writes: true
 {% endif %}
 
+disk_usage_paths:
+{% if monitor_disk_usage %}
+{% for usage in monitor_disk_usage %}
+  - name: {{ usage.name }}
+    path: {{ usage.path }}
+    warn_percent: {{ usage.warn_percent }}
+    critical_percent: {{ usage.critical_percent }}
+    min_free_gb: {{ usage.min_free_gb }}
+{% endfor %}
+{% else %}
+  - name: root
+    path: /
+    warn_percent: 85
+    critical_percent: 95
+    min_free_gb: 2
+{% endif %}
+
 notification:
   mail_to:
 {% if monitor_mail_to %}

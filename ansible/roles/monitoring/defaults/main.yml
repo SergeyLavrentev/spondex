@@ -20,6 +20,12 @@ monitor_disks:
     max_iops: 1000
     include_reads: true
     include_writes: true
+monitor_disk_usage:
+  - name: root
+    path: /
+    warn_percent: 85
+    critical_percent: 95
+    min_free_gb: 2
 monitor_mail_to:
   - root@localhost
 monitor_mail_from: spondex-monitor@localhost
