@@ -4,16 +4,41 @@
     name:
       - sysstat
       - mailutils
-      - python3-pip
+      - curl
       - python3-venv
     state: present
     update_cache: true
 
-- name: Ensure uv CLI is installed
-  ansible.builtin.pip:
-    name: "uv=={{ monitor_uv_version }}"
-    state: present
-    executable: pip3
+- name: Ensure uv install directory exists
+  ansible.builtin.file:
+    path: "{{ monitor_uv_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Install uv CLI if missing
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+  args:
+    creates: "{{ monitor_uv_binary }}"
+  environment:
+    UV_INSTALL_DIR: "{{ monitor_uv_install_dir }}"
+
+- name: Check installed uv version
+  ansible.builtin.command:
+    cmd: "{{ monitor_uv_binary }} --version"
+  register: monitor_uv_check
+  changed_when: false
+  failed_when: false
+  environment:
+    PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
+
+- name: Ensure uv CLI is at required version
+  ansible.builtin.command:
+    cmd: "{{ monitor_uv_binary }} self update --version {{ monitor_uv_version }}"
+  when: monitor_uv_check.stdout is not search(' {{ monitor_uv_version }}')
+  environment:
+    PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
 
 - name: Ensure monitoring virtualenv parent directory exists
   ansible.builtin.file:
@@ -37,6 +62,7 @@
     chdir: "{{ app_root }}"
   environment:
     UV_LINK_MODE: copy
+    PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
   register: monitor_uv_export
   changed_when: false
 
@@ -47,6 +73,7 @@
     creates: "{{ monitor_virtualenv_dir }}/bin/python"
   environment:
     UV_LINK_MODE: copy
+    PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
 
 - name: Sync monitoring dependencies with uv
   ansible.builtin.command:
@@ -54,6 +81,7 @@
     chdir: "{{ app_root }}"
   environment:
     UV_LINK_MODE: copy
+    PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
   register: monitor_uv_sync
   changed_when: "('installed' in (monitor_uv_sync.stdout | lower)) or ('removed' in (monitor_uv_sync.stdout | lower)) or ('installed' in (monitor_uv_sync.stderr | lower)) or ('removed' in (monitor_uv_sync.stderr | lower))"
 
