@@ -175,3 +175,79 @@ jobs:
             --private-key ~/.ssh/deploy_key \
             --extra-vars '@/tmp/extra_vars.json' \
             --tags smoke
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: infra-smoke
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    env:
+      DEPLOY_APP_TOKENS: ${{ secrets['APP_TOKENS'] }}
+      DEPLOY_SPOTIFY_CACHE: ${{ secrets['SPOTIFY_CACHE_CONTENT'] }}
+      DEPLOY_GHCR_PAT: ${{ secrets['GHCR_PAT'] }}
+      DEPLOY_GHCR_USERNAME: ${{ vars.GHCR_IMAGE_OWNER || github.repository_owner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Add uv to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Ansible tooling
+        run: uv tool install ansible
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          set -euxo pipefail
+          install -m 0700 -d ~/.ssh
+          printf '%s' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p 49384 "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Create dynamic inventory
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SSH_HOST" ]; then
+            echo "SSH_HOST secret is required" >&2
+            exit 1
+          fi
+          printf '[prod]\n%s ansible_port=49384\n' "$SSH_HOST" > /tmp/inventory.ini
+
+      - name: Prepare Ansible extra vars
+        run: |
+          set -euxo pipefail
+          python -c "import json, os, pathlib; pathlib.Path('/tmp/extra_vars.json').write_text(json.dumps({
+            'app_tokens_content': os.environ.get('DEPLOY_APP_TOKENS', ''),
+            'extra_ufw_ports': os.environ.get('DEPLOY_EXTRA_UFW_PORTS', ''),
+            'app_port': os.environ.get('DEPLOY_APP_PORT', ''),
+            'spotify_cache_content': os.environ.get('DEPLOY_SPOTIFY_CACHE', ''),
+            'ghcr_username': os.environ.get('DEPLOY_GHCR_USERNAME', ''),
+            'ghcr_pat': os.environ.get('DEPLOY_GHCR_PAT', ''),
+          }))"
+
+      - name: Run Ansible playbook
+        run: |
+          set -euxo pipefail
+          export ANSIBLE_HOST_KEY_CHECKING=true
+          ansible-playbook ansible/deploy.yml \
+            -i /tmp/inventory.ini \
+            --limit prod \
+            -u "${{ secrets.SSH_USER }}" \
+            --private-key ~/.ssh/deploy_key \
+            --extra-vars '@/tmp/extra_vars.json'
