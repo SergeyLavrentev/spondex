@@ -1,0 +1,53 @@
+---
+- name: Deploy Spondex monitoring stack
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    app_root: "/opt/spondex"
+    repo_root: "{{ playbook_dir | dirname }}"
+
+  pre_tasks:
+    - name: Ensure Python 3 is available
+      ansible.builtin.raw: test -x /usr/bin/python3 || (apt-get update -y && apt-get install -y python3)
+      changed_when: false
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Ensure application directory exists
+      ansible.builtin.file:
+        path: "{{ app_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Synchronize monitoring sources
+      ansible.posix.synchronize:
+        src: "{{ repo_root }}/"
+        dest: "{{ app_root }}"
+        delete: false
+        archive: true
+        checksum: true
+        recursive: true
+        rsync_path: "sudo rsync"
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=.github"
+          - "--exclude=ansible"
+          - "--exclude=.venv"
+          - "--exclude=.pytest_cache"
+          - "--exclude=.cache"
+          - "--exclude=*.pyc"
+          - "--include=monitoring/"
+          - "--include=monitoring/***"
+          - "--include=docs/"
+          - "--include=docs/monitoring.md"
+          - "--exclude=*"
+      delegate_to: localhost
+      become: false
+
+  tasks:
+    - name: Configure monitoring stack
+      ansible.builtin.import_role:
+        name: monitoring

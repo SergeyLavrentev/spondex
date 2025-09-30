@@ -256,8 +256,8 @@ class DatabaseManager:
             self.cursor.execute("DELETE FROM playlists WHERE service = %s", (service,))
         else:
             self.cursor.execute(
-                "DELETE FROM playlists WHERE service = %s AND playlist_id NOT IN %s",
-                (service, tuple(playlist_ids)),
+                "DELETE FROM playlists WHERE service = %s AND NOT (playlist_id = ANY(%s))",
+                (service, list(playlist_ids)),
             )
         self.conn.commit()
 
@@ -325,8 +325,8 @@ class DatabaseManager:
             self.cursor.execute("DELETE FROM favorite_albums WHERE service = %s", (service,))
         else:
             self.cursor.execute(
-                "DELETE FROM favorite_albums WHERE service = %s AND album_id NOT IN %s",
-                (service, tuple(album_ids)),
+                "DELETE FROM favorite_albums WHERE service = %s AND NOT (album_id = ANY(%s))",
+                (service, list(album_ids)),
             )
         self.conn.commit()
 
@@ -354,8 +354,8 @@ class DatabaseManager:
             self.cursor.execute("DELETE FROM favorite_artists WHERE service = %s", (service,))
         else:
             self.cursor.execute(
-                "DELETE FROM favorite_artists WHERE service = %s AND artist_id NOT IN %s",
-                (service, tuple(artist_ids)),
+                "DELETE FROM favorite_artists WHERE service = %s AND NOT (artist_id = ANY(%s))",
+                (service, list(artist_ids)),
             )
         self.conn.commit()
 

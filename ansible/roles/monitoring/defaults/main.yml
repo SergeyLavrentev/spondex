@@ -1,0 +1,29 @@
+---
+monitor_state_path: /var/lib/spondex-monitor/state.db
+monitor_retention_days: 365
+monitor_load_window_minutes: 60
+monitor_memory_threshold: 0.95
+monitor_docker_service: docker
+monitor_app_containers:
+  - name: spondex-app-1
+    label: app
+monitor_db_container: spondex-postgres-1
+monitor_db_host: 127.0.0.1
+monitor_db_port: 5432
+monitor_db_user: postgres
+monitor_db_name: music_sync
+monitor_log_files:
+  - path: /opt/spondex/logs/app.log
+    pattern: Traceback
+monitor_disks:
+  - name: sda
+    max_iops: 1000
+    include_reads: true
+    include_writes: true
+monitor_mail_to:
+  - root@localhost
+monitor_mail_from: spondex-monitor@localhost
+monitor_mail_subject: "[Spondex Monitor]"
+monitor_mail_cc: []
+monitor_timer_interval: 5m
+monitor_overwrite_config: false

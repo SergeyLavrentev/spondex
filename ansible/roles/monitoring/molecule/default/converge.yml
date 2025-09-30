@@ -1,0 +1,25 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  vars:
+    app_root: /opt/spondex
+  pre_tasks:
+    - name: Ensure application directory exists
+      ansible.builtin.file:
+        path: "{{ app_root }}/monitoring"
+        state: directory
+        mode: "0755"
+
+    - name: Drop dummy monitoring script
+      ansible.builtin.copy:
+        dest: "{{ app_root }}/monitoring/monitor.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          print("noop")
+
+  tasks:
+    - name: Include monitoring role
+      ansible.builtin.include_role:
+        name: monitoring

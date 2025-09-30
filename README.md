@@ -198,8 +198,40 @@ docker compose build app
    ```bash
    docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT name, platform, track_count FROM playlists ORDER BY updated_at DESC LIMIT 10;"
    ```
-- Для полного очищения БД и повторного применения схемы выполните деплой с параметром `--extra-vars "force_recreate_db=true"` — плейбук остановит стэк, удалит том `spondex_postgres_data` и создаст систему заново.
-- Флаг `--include-followed-playlists` добавляет подписанные плейлисты Spotify к снимку (по умолчанию сохраняются только личные).
+
+## Мониторинг
+
+Начиная с версии Python 3.13, мониторинг реализован собственным скриптом
+`monitoring/monitor.py`, который запускается по таймеру `systemd` на сервере
+(`spondex-monitor.service` + `spondex-monitor.timer`). Скрипт собирает ключевые
+метрики (нагрузка CPU, память, события OOM, состояние Docker и контейнеров,
+проверки Postgres/SELECT 1, поиск `Traceback` в логах, перезапуски сервера,
+дисковые IOPS) и хранит их в SQLite за последний год. При срабатывании порогов
+отправляется письмо через локальный MTA.
+
+Настройки и инструкция находятся в [docs/monitoring.md](docs/monitoring.md).
+Для точечных обновлений мониторинга без полного деплоя используйте плейбук
+`ansible/monitoring.yml`.
+Если хочется зафиксировать правки прямо на сервере, оставьте
+`monitor_overwrite_config=false` (значение по умолчанию) — Ansible не будет
+перезатирать `/opt/spondex/monitoring/config.yaml`, пока явно не попросите.
+
+### Molecule-тесты роли мониторинга
+
+Для локального прогона создайте виртуальное окружение и ставьте зависимости
+только внутрь него:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install molecule molecule-plugins[docker] ansible
+ANSIBLE_COLLECTIONS_PATHS="$PWD/.molecule-collections:/usr/share/ansible/collections" \
+   molecule test --scenario-name default
+```
+
+В CI добавлен пайплайн `.github/workflows/molecule.yml`, который запускает те же
+проверки внутри venv. Шаг отмечен как `continue-on-error`, поэтому не красит
+весь pipeline, если тесты не прошли, но лог ошибок остаётся доступным.
 
 Плейлисты автоматически создаются (если их ещё нет) и пополняются недостающими треками в Yandex Music. Для избранных альбомов и исполнителей дифф добавляет недостающие элементы в выбранную целевую платформу; по умолчанию данные уезжают только в Yandex. Удаление ни для одного из режимов не выполняется. Чтобы ограничиться аналитикой без изменений, запускайте синк с `--favorite-sync-readonly`.
 

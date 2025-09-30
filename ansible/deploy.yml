@@ -384,3 +384,7 @@
     - name: Display running containers
       ansible.builtin.debug:
         var: compose_ps.stdout_lines
+
+    - name: Configure monitoring stack
+      ansible.builtin.import_role:
+        name: monitoring

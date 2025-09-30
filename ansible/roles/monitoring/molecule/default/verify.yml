@@ -1,0 +1,59 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  vars:
+    app_root: /opt/spondex
+  tasks:
+    - name: Read current monitoring config
+      ansible.builtin.slurp:
+        src: "{{ app_root }}/monitoring/config.yaml"
+      register: monitor_config_initial
+
+    - name: Assert current config looks templated
+      ansible.builtin.assert:
+        that:
+          - "'Spondex monitoring configuration' in (monitor_config_initial.content | b64decode)"
+        fail_msg: "Initial config does not look like templated output"
+
+    - name: Simulate manual override of config
+      ansible.builtin.copy:
+        dest: "{{ app_root }}/monitoring/config.yaml"
+        mode: "0640"
+        content: |
+          # manual override
+          manual_override: true
+
+    - name: Re-run role without overwrite flag (should preserve manual config)
+      ansible.builtin.include_role:
+        name: monitoring
+
+    - name: Capture config after preservation run
+      ansible.builtin.slurp:
+        src: "{{ app_root }}/monitoring/config.yaml"
+      register: monitor_config_preserved
+
+    - name: Assert manual override is preserved
+      ansible.builtin.assert:
+        that:
+          - "'# manual override' in (monitor_config_preserved.content | b64decode)"
+          - "'manual_override: true' in (monitor_config_preserved.content | b64decode)"
+        fail_msg: "Manual overrides were not preserved when overwrite flag disabled"
+
+    - name: Re-run role with overwrite flag to restore template
+      ansible.builtin.include_role:
+        name: monitoring
+      vars:
+        monitor_overwrite_config: true
+
+    - name: Capture config after overwrite run
+      ansible.builtin.slurp:
+        src: "{{ app_root }}/monitoring/config.yaml"
+      register: monitor_config_overwritten
+
+    - name: Assert overwrite restored templated config
+      ansible.builtin.assert:
+        that:
+          - "'Spondex monitoring configuration' in (monitor_config_overwritten.content | b64decode)"
+          - "'manual_override' not in (monitor_config_overwritten.content | b64decode)"
+        fail_msg: "Overwrite flag did not restore templated configuration"

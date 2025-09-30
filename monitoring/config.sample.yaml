@@ -1,0 +1,48 @@
+# Example configuration for Spondex monitoring script
+# Copy this file and tweak the thresholds/paths as needed. On hosts without
+# Ansible you can edit /opt/spondex/monitoring/config.yaml directly; the next
+# systemd run will pick up the changes. Ansible will only overwrite the live
+# file when run with monitor_overwrite_config=true.
+
+state_path: /var/lib/spondex-monitor/state.db
+retention_days: 365
+cpu_cores: null  # autodetect when null
+
+# --- Thresholds ------------------------------------------------------------
+load_window_minutes: 60
+memory_threshold: 0.95
+
+# --- Runtime ---------------------------------------------------------------
+compose_file: /opt/spondex/docker-compose.prod.yml
+docker_service: docker
+app_checks:
+  - container: spondex-app-1
+    name: app
+log_checks:
+  - path: /opt/spondex/logs/app.log
+    pattern: Traceback
+  - path: /var/log/syslog
+    pattern: Out of memory
+  
+db_check:
+  container_name: spondex-postgres-1
+  host: 127.0.0.1
+  port: 5432
+  user: postgres
+  database: music_sync
+  password_env_var: SPONDEX_DB_PASSWORD
+
+disk_devices:
+  - name: nvme0n1
+    max_iops: 1000
+    include_reads: true
+    include_writes: true
+
+notification:
+  mail_to:
+    - ops@example.com
+  mail_from: spondex-monitor@localhost
+  subject_prefix: "[Spondex Monitor]"
+
+enable_email: true
+additional_recipients: []

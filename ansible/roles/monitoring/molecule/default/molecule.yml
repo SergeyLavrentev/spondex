@@ -1,0 +1,33 @@
+---
+dependency:
+  name: galaxy
+  enabled: false
+
+driver:
+  name: docker
+
+platforms:
+  - name: debian12
+    image: geerlingguy/docker-debian12-ansible:latest
+    pre_build_image: true
+    privileged: true
+    command: /sbin/init
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /tmp
+    environment:
+      container: docker
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_COLLECTIONS_PATHS: "{{ lookup('env', 'HOME') }}/.ansible/collections:/usr/share/ansible/collections"
+  playbooks:
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+
+verifier:
+  name: ansible

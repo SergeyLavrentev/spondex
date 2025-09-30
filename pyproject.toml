@@ -26,6 +26,7 @@ dependencies = [
 "yandex-music==2.2.0",
 "yarl==1.11.1",
 "psycopg[binary]==3.2.2",
+"PyYAML==6.0.2",
 ]
 
 [project.optional-dependencies]

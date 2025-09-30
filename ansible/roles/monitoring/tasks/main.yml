@@ -1,0 +1,47 @@
+---
+- name: Ensure monitoring dependencies are installed
+  ansible.builtin.apt:
+    name:
+      - sysstat
+      - mailutils
+    state: present
+    update_cache: true
+
+- name: Ensure monitoring state directory exists
+  ansible.builtin.file:
+    path: "{{ monitor_state_path | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Ensure monitoring script is executable
+  ansible.builtin.file:
+    path: "{{ app_root }}/monitoring/monitor.py"
+    mode: "0755"
+
+- name: Render monitoring configuration
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/spondex-monitor-config.yaml.j2"
+    dest: "{{ app_root }}/monitoring/config.yaml"
+    mode: "0640"
+    force: "{{ monitor_overwrite_config | bool }}"
+    backup: "{{ monitor_overwrite_config | bool }}"
+
+- name: Install systemd service for monitoring
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/spondex-monitor.service.j2"
+    dest: "/etc/systemd/system/spondex-monitor.service"
+    mode: "0644"
+  notify: Reload systemd daemon for monitoring units
+
+- name: Install systemd timer for monitoring
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/spondex-monitor.timer.j2"
+    dest: "/etc/systemd/system/spondex-monitor.timer"
+    mode: "0644"
+  notify: Reload systemd daemon for monitoring units
+
+- name: Ensure monitoring timer is enabled
+  ansible.builtin.systemd:
+    name: spondex-monitor.timer
+    enabled: true
+    state: started

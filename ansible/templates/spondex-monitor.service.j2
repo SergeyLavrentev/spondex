@@ -1,0 +1,13 @@
+[Unit]
+Description=Spondex monitoring job
+Requires={{ monitor_docker_service }}
+After={{ monitor_docker_service }}
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ app_root }}
+EnvironmentFile={{ app_root }}/.env
+ExecStart=/usr/bin/env python3 {{ app_root }}/monitoring/monitor.py --config {{ app_root }}/monitoring/config.yaml --email --print
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
