@@ -27,3 +27,7 @@ monitor_mail_subject: "[Spondex Monitor]"
 monitor_mail_cc: []
 monitor_timer_interval: 5m
 monitor_overwrite_config: false
+monitor_uv_version: "0.4.10"
+monitor_virtualenv_dir: "{{ app_root }}/.venv-monitor"
+monitor_python_version: "3.13.0"
+monitor_uv_requirements: "{{ app_root }}/uv.lock"

@@ -23,7 +23,12 @@ platforms:
 provisioner:
   name: ansible
   env:
-    ANSIBLE_COLLECTIONS_PATHS: "{{ lookup('env', 'HOME') }}/.ansible/collections:/usr/share/ansible/collections"
+    ANSIBLE_CONFIG: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../ansible.cfg"
+    ANSIBLE_COLLECTIONS_PATH: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../collections:/usr/share/ansible/collections"
+    ANSIBLE_ROLES_PATH: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../"
+  config_options:
+    defaults:
+      roles_path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../"
   playbooks:
     prepare: prepare.yml
     converge: converge.yml

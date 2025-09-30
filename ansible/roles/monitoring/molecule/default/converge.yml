@@ -19,6 +19,18 @@
           #!/usr/bin/env python3
           print("noop")
 
+    - name: Upload uv lockfile
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../../../../uv.lock"
+        dest: "{{ app_root }}/uv.lock"
+        mode: "0644"
+
+    - name: Upload pyproject
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../../../../pyproject.toml"
+        dest: "{{ app_root }}/pyproject.toml"
+        mode: "0644"
+
   tasks:
     - name: Include monitoring role
       ansible.builtin.include_role:
