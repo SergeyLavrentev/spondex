@@ -1,3 +1,14 @@
 - name: Reload systemd daemon for monitoring units
   ansible.builtin.systemd:
     daemon_reload: true
+
+- name: Regenerate exim4 configuration
+  ansible.builtin.command:
+    cmd: update-exim4.conf
+  listen: Regenerate exim4 configuration
+
+- name: Restart exim4 service
+  ansible.builtin.systemd:
+    name: exim4
+    state: restarted
+  listen: Regenerate exim4 configuration

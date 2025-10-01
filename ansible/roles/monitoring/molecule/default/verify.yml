@@ -57,3 +57,67 @@
           - "'Spondex monitoring configuration' in (monitor_config_overwritten.content | b64decode)"
           - "'manual_override' not in (monitor_config_overwritten.content | b64decode)"
         fail_msg: "Overwrite flag did not restore templated configuration"
+
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: apt
+
+    - name: Assert Exim4 package is installed
+      ansible.builtin.assert:
+        that:
+          - "'exim4' in ansible_facts.packages"
+        fail_msg: "Exim4 package is not installed"
+
+    - name: Read exim4 configuration
+      ansible.builtin.slurp:
+        src: /etc/exim4/update-exim4.conf.conf
+      register: exim_config_content
+
+    - name: Assert exim4 is configured for internet site
+      ansible.builtin.assert:
+        that:
+          - >
+              (exim_config_content.content | b64decode) is search("dc_eximconfig_configtype='internet'")
+        fail_msg: "Exim4 configuration type is not set to 'internet'"
+
+    - name: Check mailname configuration
+      ansible.builtin.slurp:
+        src: /etc/mailname
+      register: mailname_content
+
+    - name: Assert mailname matches inventory hostname
+      ansible.builtin.assert:
+        that:
+          - "(mailname_content.content | b64decode | trim) == inventory_hostname"
+        fail_msg: "Mailname does not match expected hostname"
+
+    - name: Verify exim4 service is active
+      ansible.builtin.command:
+        cmd: systemctl is-active exim4
+      register: exim_service_status
+      changed_when: false
+
+    - name: Assert exim4 service is running
+      ansible.builtin.assert:
+        that:
+          - exim_service_status.stdout.strip() == 'active'
+        fail_msg: "exim4 service is not active"
+
+    - name: Send local test email through exim4
+      ansible.builtin.shell: |
+        set -euo pipefail
+        printf 'Subject: Molecule test\nTo: root\n\nHello from Molecule!\n' | sendmail -i root
+      args:
+        executable: /bin/bash
+
+    - name: Verify exim4 queue is empty after sending mail
+      ansible.builtin.command:
+        cmd: exim4 -bp
+      register: exim_queue
+      changed_when: false
+
+    - name: Assert exim4 queue output command succeeded
+      ansible.builtin.assert:
+        that:
+          - exim_queue.rc == 0
+        fail_msg: "Failed to inspect exim4 mail queue"

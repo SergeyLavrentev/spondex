@@ -4,6 +4,27 @@ monitor_retention_days: 365
 monitor_load_window_minutes: 60
 monitor_memory_threshold: 0.95
 monitor_docker_service: docker
+monitor_required_packages:
+  - sysstat
+  - mailutils
+  - curl
+  - python3-venv
+  - exim4
+monitor_mta_manage: true
+monitor_mta_configtype: internet
+monitor_mta_mailname: "{{ inventory_hostname }}"
+monitor_mta_other_hostnames: []
+monitor_mta_local_interfaces: "127.0.0.1 ; ::1"
+monitor_mta_readhost: ""
+monitor_mta_relay_domains: ""
+monitor_mta_minimal_dns: false
+monitor_mta_relay_nets: ""
+monitor_mta_smarthost: ""
+monitor_mta_cfilemode: "644"
+monitor_mta_use_split_config: false
+monitor_mta_hide_mailname: ""
+monitor_mta_mailname_in_oh: true
+monitor_mta_localdelivery: mail_spool
 monitor_app_containers:
   - name: spondex-app-1
     label: app
