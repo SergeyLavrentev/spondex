@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--print", dest="print_report", action="store_true", help="Print alerts and metrics to stdout (default)")
     parser.add_argument("--no-print", dest="print_report", action="store_false", help="Suppress stdout output")
     parser.set_defaults(print_report=None)
+    parser.add_argument("--test-email", action="store_true", help="Send a test email with current metrics")
     return parser.parse_args()
 
 
@@ -87,7 +88,15 @@ def main() -> int:
     if should_print:
         print(report)
 
-    if alerts:
+    if args.test_email:
+        try:
+            send_alert_email(config, [], report)
+            print("Test email sent successfully.")
+        except Exception as exc:
+            print(f"Failed to send test email: {exc}", file=sys.stderr)
+            return 2
+        return 0
+    elif alerts:
         try:
             send_alert_email(config, alerts, report)
         except Exception as exc:  # pragma: no cover

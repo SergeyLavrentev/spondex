@@ -28,6 +28,7 @@ monitor_disk_usage:
     min_free_gb: 2
 monitor_mail_to:
   - root@localhost
+  - bearded.rocker@gmail.com
 monitor_mail_from: spondex-monitor@localhost
 monitor_mail_subject: "[Spondex Monitor]"
 monitor_mail_cc: []
