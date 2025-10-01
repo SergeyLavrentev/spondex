@@ -239,6 +239,7 @@ jobs:
             'spotify_cache_content': os.environ.get('DEPLOY_SPOTIFY_CACHE', ''),
             'ghcr_username': os.environ.get('DEPLOY_GHCR_USERNAME', ''),
             'ghcr_pat': os.environ.get('DEPLOY_GHCR_PAT', ''),
+            'monitor_mail_to': os.environ.get('DEPLOY_MONITOR_MAIL_TO', '').split(',') if os.environ.get('DEPLOY_MONITOR_MAIL_TO') else [],
           }))"
 
       - name: Run Ansible playbook
