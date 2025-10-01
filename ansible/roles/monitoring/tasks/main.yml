@@ -70,7 +70,7 @@
 
 - name: Provision monitoring virtualenv via uv
   ansible.builtin.command:
-    cmd: uv venv --python {{ monitor_python_version }} {{ monitor_virtualenv_dir }}
+    cmd: uv venv --clear --python {{ monitor_python_version }} {{ monitor_virtualenv_dir }}
     chdir: "{{ app_root }}"
     creates: "{{ monitor_virtualenv_dir }}/bin/python"
   environment:
