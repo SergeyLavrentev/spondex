@@ -183,6 +183,20 @@
         src: env.j2
         dest: "{{ app_root }}/.env"
         mode: '0600'
+        force: true
+      no_log: true
+
+    - name: Validate runtime environment file
+      ansible.builtin.stat:
+        path: "{{ app_root }}/.env"
+      register: runtime_env_stat
+
+    - name: Assert runtime environment file created
+      ansible.builtin.assert:
+        that:
+          - runtime_env_stat.stat.exists | default(false)
+          - (runtime_env_stat.stat.size | default(0)) > 0
+        fail_msg: "Runtime environment file was not created on the target host."
 
     - name: Ensure Spotify cache file absent when not provided
       when:

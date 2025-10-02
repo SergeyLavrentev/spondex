@@ -315,11 +315,28 @@ class YandexMusic(MusicService):
         return track_part, album_part, composite
 
     def fetch_playlist(self, playlist_id: str) -> Optional[Any]:
+        owner_arg: Optional[Any] = None
+        kind_arg: Optional[Any] = playlist_id
+
+        if ":" in str(playlist_id):
+            owner_part, kind_part = str(playlist_id).split(":", 1)
+            owner_arg = self._normalize_playlist_arg(owner_part) if owner_part else None
+            kind_arg = kind_part or None
+
+        kind_arg = self._normalize_playlist_arg(kind_arg)
+
         def _fetch():
-            return self.client.users_playlists(playlist_id)
+            if owner_arg is not None:
+                return self.client.users_playlists(kind_arg, user_id=owner_arg)
+            return self.client.users_playlists(kind_arg)
+
+        description_id = (
+            f"{owner_arg}:{kind_arg}" if owner_arg is not None else f"{kind_arg}"
+        )
 
         return self._execute_with_retry(
-            f"Fetch Yandex playlist details {playlist_id}", _fetch
+            f"Fetch Yandex playlist details {description_id}",
+            _fetch,
         )
 
     def ensure_playlist(
@@ -398,23 +415,59 @@ class YandexMusic(MusicService):
 
         return current_playlist
 
-    def _extract_playlist_id(self, playlist_obj) -> Optional[str]:
-        playlist_identifier = getattr(playlist_obj, "playlist_id", None)
-        if playlist_identifier:
-            return str(playlist_identifier)
-
+    def _resolve_playlist_fetch_params(
+        self, playlist_obj
+    ) -> Tuple[Optional[str], Optional[str]]:
         owner = getattr(playlist_obj, "owner", None)
         owner_uid = getattr(owner, "uid", None) if owner else None
         kind = getattr(playlist_obj, "kind", None)
-        if owner_uid is not None and kind is not None:
-            return f"{owner_uid}:{kind}"
-        return None
+        playlist_identifier = getattr(playlist_obj, "playlist_id", None)
+
+        if playlist_identifier:
+            playlist_str = str(playlist_identifier)
+            if ":" in playlist_str:
+                owner_part, kind_part = playlist_str.split(":", 1)
+                kind = kind_part or kind
+                owner_uid = owner_uid or owner_part
+            else:
+                kind = kind or playlist_str
+
+        if kind is None:
+            return None, None
+
+        return str(kind), str(owner_uid) if owner_uid is not None else None
+
+    @staticmethod
+    def _normalize_playlist_arg(value: Optional[str]) -> Optional[Any]:
+        if value is None:
+            return None
+        value_str = str(value)
+        if value_str.isdigit():
+            try:
+                return int(value_str)
+            except ValueError:
+                pass
+        return value_str
 
     def _refresh_playlist_object(self, playlist_obj):
-        playlist_id = self._extract_playlist_id(playlist_obj)
-        if not playlist_id:
+        kind, owner_uid = self._resolve_playlist_fetch_params(playlist_obj)
+        if not kind:
             return playlist_obj
-        refreshed = self.fetch_playlist(str(playlist_id))
+
+        kind_arg = self._normalize_playlist_arg(kind)
+        owner_arg = self._normalize_playlist_arg(owner_uid)
+
+        def _fetch():
+            if owner_arg is not None:
+                return self.client.users_playlists(kind_arg, user_id=owner_arg)
+            return self.client.users_playlists(kind_arg)
+
+        description_id = f"{owner_uid}:{kind}" if owner_uid else f"{kind}"
+
+        refreshed = self._execute_with_retry(
+            f"Fetch Yandex playlist details {description_id}",
+            _fetch,
+        )
         return refreshed or playlist_obj
 
     def _make_space_in_playlist(self, playlist_obj):
@@ -444,6 +497,8 @@ class YandexMusic(MusicService):
             _delete,
         )
 
+        playlist_after_delete = updated or refreshed
+
         if updated:
             logger.info(
                 "Удалён трек %s — %s для освобождения места в плейлисте %s",
@@ -451,9 +506,17 @@ class YandexMusic(MusicService):
                 track_title or "?",
                 getattr(updated, "title", getattr(updated, "kind", "unknown")),
             )
-            return updated
 
-        return refreshed
+        try:
+            refreshed_after_delete = self._refresh_playlist_object(playlist_after_delete)
+        except Exception as refresh_error:
+            logger.warning(
+                "Не удалось обновить состояние плейлиста после удаления трека: %s",
+                refresh_error,
+            )
+            return playlist_after_delete
+
+        return refreshed_after_delete
 
     @staticmethod
     def _is_playlist_full_error(exc: Exception) -> bool:
