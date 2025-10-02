@@ -88,6 +88,8 @@ notification:
       []
 {% endif %}
     bot_token_env: {{ monitor_telegram_bot_token_env | to_json }}
+    subscriber_store: {{ monitor_telegram_subscriber_store | to_json }}
+    poll_updates: {{ monitor_telegram_auto_register | bool | string | lower }}
     api_base: {{ monitor_telegram_api_base | to_json }}
     request_timeout: {{ monitor_telegram_request_timeout }}
   mail:
