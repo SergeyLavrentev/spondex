@@ -65,15 +65,7 @@ jobs:
       - name: Prepare Ansible extra vars
         run: |
           set -euxo pipefail
-          python -c "import json, os, pathlib; pathlib.Path('/tmp/extra_vars.json').write_text(json.dumps({
-            'app_tokens_content': os.environ.get('DEPLOY_APP_TOKENS', ''),
-            'extra_ufw_ports': os.environ.get('DEPLOY_EXTRA_UFW_PORTS', ''),
-            'app_port': os.environ.get('DEPLOY_APP_PORT', ''),
-            'spotify_cache_content': os.environ.get('DEPLOY_SPOTIFY_CACHE', ''),
-            'ghcr_username': os.environ.get('DEPLOY_GHCR_USERNAME', ''),
-            'ghcr_pat': os.environ.get('DEPLOY_GHCR_PAT', ''),
-            'monitor_telegram_bot_token': os.environ.get('DEPLOY_TG_BOT_TOKEN', ''),
-          }))"
+          python -c "import json, os, pathlib, sys; token=os.environ.get('DEPLOY_TG_BOT_TOKEN',''); ci=os.environ.get('CI'); sys.exit('DEPLOY_TG_BOT_TOKEN secret is required in CI environment') if ci and not token else None; payload={'app_tokens_content': os.environ.get('DEPLOY_APP_TOKENS',''), 'extra_ufw_ports': os.environ.get('DEPLOY_EXTRA_UFW_PORTS',''), 'app_port': os.environ.get('DEPLOY_APP_PORT',''), 'spotify_cache_content': os.environ.get('DEPLOY_SPOTIFY_CACHE',''), 'ghcr_username': os.environ.get('DEPLOY_GHCR_USERNAME',''), 'ghcr_pat': os.environ.get('DEPLOY_GHCR_PAT',''), 'monitor_telegram_bot_token': token}; pathlib.Path('/tmp/extra_vars.json').write_text(json.dumps(payload))"
 
       - name: Run Ansible playbook
         run: |

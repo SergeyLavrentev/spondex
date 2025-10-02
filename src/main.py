@@ -354,22 +354,130 @@ class YandexMusic(MusicService):
         album_id: str,
         at: Optional[int] = None,
     ):
-        position = at if at is not None else len(getattr(playlist_obj, "tracks", []) or [])
+        current_playlist = playlist_obj
 
-        def _insert():
-            return self.client.users_playlists_insert_track(
-                getattr(playlist_obj, "kind"),
-                track_id,
-                album_id,
-                at=position,
-                revision=getattr(playlist_obj, "revision", 1),
+        for attempt in range(2):
+            tracks_attr = getattr(current_playlist, "tracks", []) or []
+            if at is not None:
+                position = min(len(tracks_attr), at)
+            else:
+                position = len(tracks_attr)
+
+            def _insert():
+                return self.client.users_playlists_insert_track(
+                    getattr(current_playlist, "kind"),
+                    track_id,
+                    album_id,
+                    at=position,
+                    revision=getattr(current_playlist, "revision", 1),
+                )
+
+            try:
+                updated = self._execute_with_retry(
+                    f"Insert track {track_id}:{album_id} into Yandex playlist {getattr(current_playlist, 'kind', 'unknown')}",
+                    _insert,
+                )
+                return updated or current_playlist
+            except YandexMusicError as exc:
+                if attempt == 0 and self._is_playlist_full_error(exc):
+                    logger.warning(
+                        "Плейлист %s заполнен, освобождаю место для новых треков",
+                        getattr(current_playlist, "title", getattr(current_playlist, "kind", "unknown")),
+                    )
+                    trimmed = self._make_space_in_playlist(current_playlist)
+                    if not trimmed:
+                        logger.error(
+                            "Не удалось освободить место в плейлисте %s: %s",
+                            getattr(current_playlist, "title", getattr(current_playlist, "kind", "unknown")),
+                            exc,
+                        )
+                        raise
+                    current_playlist = trimmed
+                    continue
+                raise
+
+        return current_playlist
+
+    def _extract_playlist_id(self, playlist_obj) -> Optional[str]:
+        playlist_identifier = getattr(playlist_obj, "playlist_id", None)
+        if playlist_identifier:
+            return str(playlist_identifier)
+
+        owner = getattr(playlist_obj, "owner", None)
+        owner_uid = getattr(owner, "uid", None) if owner else None
+        kind = getattr(playlist_obj, "kind", None)
+        if owner_uid is not None and kind is not None:
+            return f"{owner_uid}:{kind}"
+        return None
+
+    def _refresh_playlist_object(self, playlist_obj):
+        playlist_id = self._extract_playlist_id(playlist_obj)
+        if not playlist_id:
+            return playlist_obj
+        refreshed = self.fetch_playlist(str(playlist_id))
+        return refreshed or playlist_obj
+
+    def _make_space_in_playlist(self, playlist_obj):
+        refreshed = self._refresh_playlist_object(playlist_obj)
+        tracks_attr = getattr(refreshed, "tracks", []) or []
+        if not tracks_attr:
+            logger.warning(
+                "Плейлист %s пустой, нечего удалять при попытке освободить место",
+                getattr(refreshed, "title", getattr(refreshed, "kind", "unknown")),
+            )
+            return None
+
+        oldest_track = tracks_attr[0]
+        track_title = getattr(getattr(oldest_track, "track", None), "title", None)
+        track_artists = _join_artist_names(getattr(getattr(oldest_track, "track", None), "artists", []))
+
+        def _delete():
+            return self.client.users_playlists_delete_track(
+                getattr(refreshed, "kind"),
+                from_=0,
+                to=1,
+                revision=getattr(refreshed, "revision", 1),
             )
 
         updated = self._execute_with_retry(
-            f"Insert track {track_id}:{album_id} into Yandex playlist {getattr(playlist_obj, 'kind', 'unknown')}",
-            _insert,
+            f"Delete oldest track from Yandex playlist {getattr(refreshed, 'kind', 'unknown')}",
+            _delete,
         )
-        return updated or playlist_obj
+
+        if updated:
+            logger.info(
+                "Удалён трек %s — %s для освобождения места в плейлисте %s",
+                track_artists or "?",
+                track_title or "?",
+                getattr(updated, "title", getattr(updated, "kind", "unknown")),
+            )
+            return updated
+
+        return refreshed
+
+    @staticmethod
+    def _is_playlist_full_error(exc: Exception) -> bool:
+        if not isinstance(exc, YandexMusicError):
+            return False
+
+        message = " ".join(str(arg) for arg in exc.args if arg)
+        if message and "playlist-full" in message:
+            return True
+
+        errors = getattr(exc, "errors", None)
+        if isinstance(errors, (list, tuple)):
+            for item in errors:
+                name = None
+                if isinstance(item, dict):
+                    name = item.get("name")
+                else:
+                    name = getattr(item, "get", lambda *_: None)("name")
+                    if name is None:
+                        name = getattr(item, "name", None)
+                if name == "playlist-full":
+                    return True
+
+        return False
 
     def get_playlists(
         self, force_full_sync: bool, include_followed: bool = True
