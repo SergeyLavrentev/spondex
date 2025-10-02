@@ -18,6 +18,7 @@ jobs:
       DEPLOY_SPOTIFY_CACHE: ${{ secrets['SPOTIFY_CACHE_CONTENT'] }}
       DEPLOY_GHCR_PAT: ${{ secrets['GHCR_PAT'] }}
       DEPLOY_GHCR_USERNAME: ${{ vars.GHCR_IMAGE_OWNER || github.repository_owner }}
+      DEPLOY_TG_BOT_TOKEN: ${{ secrets['TG_BOT_TOKEN'] }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -71,6 +72,7 @@ jobs:
             'spotify_cache_content': os.environ.get('DEPLOY_SPOTIFY_CACHE', ''),
             'ghcr_username': os.environ.get('DEPLOY_GHCR_USERNAME', ''),
             'ghcr_pat': os.environ.get('DEPLOY_GHCR_PAT', ''),
+            'monitor_telegram_bot_token': os.environ.get('DEPLOY_TG_BOT_TOKEN', ''),
           }))"
 
       - name: Run Ansible playbook

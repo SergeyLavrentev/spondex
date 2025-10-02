@@ -1,5 +1,5 @@
 # This file is managed by Ansible (monitoring role)
-# Changes will be overwritten on the next deployment when monitor_mta_manage=true.
+# Changes will be overwritten on the next deployment when monitor_mail_enabled=true.
 
 dc_eximconfig_configtype='{{ monitor_mta_configtype }}'
 dc_other_hostnames='{{ monitor_mta_other_hostnames | join(" ; ") if monitor_mta_other_hostnames else monitor_mta_mailname }}'

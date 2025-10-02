@@ -55,10 +55,30 @@ class LogCheck:
 
 
 @dataclass
+class MailNotification:
+    enabled: bool = False
+    recipients: List[str] = field(default_factory=lambda: ["root@localhost"])
+    sender: str = "spondex-monitor@localhost"
+    subject_prefix: str = "[Spondex Monitor]"
+    cc: List[str] = field(default_factory=list)
+
+
+@dataclass
+class TelegramNotification:
+    enabled: bool = True
+    chat_ids: List[str] = field(default_factory=list)
+    bot_token_env: str = "TG_BOT_TOKEN"
+    token: Optional[str] = None
+    api_base: str = "https://api.telegram.org"
+    request_timeout: float = 10.0
+    subscriber_store: Optional[Path] = None
+    poll_updates: bool = False
+
+
+@dataclass
 class NotificationConfig:
-    mail_to: List[str]
-    mail_from: str = "spondex-monitor@localhost"
-    mail_subject_prefix: str = "[Spondex Monitor]"
+    mail: MailNotification = field(default_factory=MailNotification)
+    telegram: TelegramNotification = field(default_factory=TelegramNotification)
 
 
 @dataclass
@@ -74,12 +94,8 @@ class Config:
     log_checks: List[LogCheck] = field(default_factory=list)
     disk_devices: List[DiskDevice] = field(default_factory=list)
     disk_usage_checks: List[DiskUsageCheck] = field(default_factory=lambda: [DiskUsageCheck(name="root", path=Path("/"))])
-    notification: NotificationConfig = field(
-        default_factory=lambda: NotificationConfig(mail_to=["root@localhost"])
-    )
+    notification: NotificationConfig = field(default_factory=NotificationConfig)
     compose_file: Optional[Path] = field(default_factory=lambda: Path("/opt/spondex/docker-compose.prod.yml"))
-    enable_email: bool = True
-    additional_recipients: List[str] = field(default_factory=list)
 
 
 def _coerce_disk_devices(raw: Iterable[dict]) -> List[DiskDevice]:
@@ -150,10 +166,39 @@ def load_config(path: Optional[Path] = None) -> Config:
         return Config()
 
     notif = data.get("notification", {})
+
+    # Backwards compatibility: allow flat notification schema
+    if "mail" in notif or "telegram" in notif:
+        mail_section = notif.get("mail", {})
+        telegram_section = notif.get("telegram", {})
+    else:
+        mail_section = {
+            "enabled": bool(data.get("enable_email", False)),
+            "recipients": notif.get("mail_to", ["root@localhost"]),
+            "sender": notif.get("mail_from", "spondex-monitor@localhost"),
+            "subject_prefix": notif.get("subject_prefix", "[Spondex Monitor]"),
+            "cc": data.get("additional_recipients", []),
+        }
+        telegram_section = {}
+
     notification = NotificationConfig(
-        mail_to=list(notif.get("mail_to", ["root@localhost"])),
-        mail_from=notif.get("mail_from", "spondex-monitor@localhost"),
-        mail_subject_prefix=notif.get("subject_prefix", "[Spondex Monitor]"),
+        mail=MailNotification(
+            enabled=bool(mail_section.get("enabled", False)),
+            recipients=list(mail_section.get("recipients", ["root@localhost"])),
+            sender=mail_section.get("sender", "spondex-monitor@localhost"),
+            subject_prefix=mail_section.get("subject_prefix", "[Spondex Monitor]"),
+            cc=list(mail_section.get("cc", [])),
+        ),
+        telegram=TelegramNotification(
+            enabled=bool(telegram_section.get("enabled", True)),
+            chat_ids=[str(item) for item in telegram_section.get("chat_ids", [])],
+            bot_token_env=telegram_section.get("bot_token_env", "TG_BOT_TOKEN"),
+            token=telegram_section.get("token"),
+            api_base=telegram_section.get("api_base", "https://api.telegram.org"),
+            request_timeout=float(telegram_section.get("request_timeout", 10.0)),
+            subscriber_store=Path(telegram_section["subscriber_store"]) if telegram_section.get("subscriber_store") else None,
+            poll_updates=bool(telegram_section.get("poll_updates", False)),
+        ),
     )
 
     cfg = Config(
@@ -167,12 +212,16 @@ def load_config(path: Optional[Path] = None) -> Config:
         db_check=DatabaseCheck(**data.get("db_check", {"container_name": "spondex-postgres-1"})),
         log_checks=_coerce_log_checks(data.get("log_checks", [])),
         disk_devices=_coerce_disk_devices(data.get("disk_devices", [])),
-    disk_usage_checks=_coerce_disk_usage(data.get("disk_usage_paths", [])) or [DiskUsageCheck(name="root", path=Path("/"))],
+        disk_usage_checks=
+            _coerce_disk_usage(data.get("disk_usage_paths", []))
+            or [DiskUsageCheck(name="root", path=Path("/"))],
         notification=notification,
         compose_file=Path(data["compose_file"]) if data.get("compose_file") else Path("/opt/spondex/docker-compose.prod.yml"),
-        enable_email=bool(data.get("enable_email", True)),
-        additional_recipients=list(data.get("additional_recipients", [])),
     )
+
+    if cfg.notification.telegram.poll_updates and cfg.notification.telegram.subscriber_store is None:
+        cfg.notification.telegram.subscriber_store = cfg.state_path.with_name("telegram_subscribers.json")
+
     return cfg
 
 

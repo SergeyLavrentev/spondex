@@ -39,10 +39,15 @@ disk_devices:
     include_writes: true
 
 notification:
-  mail_to:
-    - ops@example.com
-  mail_from: spondex-monitor@localhost
-  subject_prefix: "[Spondex Monitor]"
-
-enable_email: true
-additional_recipients: []
+  telegram:
+    enabled: true
+    chat_ids:
+      - "8365606127"
+    bot_token_env: TG_BOT_TOKEN
+  mail:
+    enabled: false
+    recipients:
+      - ops@example.com
+    sender: spondex-monitor@localhost
+    subject_prefix: "[Spondex Monitor]"
+    cc: []

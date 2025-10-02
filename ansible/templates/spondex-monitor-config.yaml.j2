@@ -77,23 +77,23 @@ disk_usage_paths:
 {% endif %}
 
 notification:
-  mail_to:
-{% if monitor_mail_to %}
-{% for recipient in monitor_mail_to %}
-    - {{ recipient }}
-{% endfor %}
-{% else %}
-    - root@localhost
+  telegram:
+    enabled: {{ monitor_telegram_enabled | bool | string | lower }}
+    chat_ids:
+{{ (monitor_telegram_chat_ids | default([])) | to_yaml | indent(6, True) }}
+    bot_token_env: {{ monitor_telegram_bot_token_env }}
+{% if monitor_telegram_bot_token | default('') | length > 0 %}
+    token: {{ monitor_telegram_bot_token | to_json }}
 {% endif %}
-  mail_from: {{ monitor_mail_from }}
-  subject_prefix: {{ monitor_mail_subject }}
-
-enable_email: true
-{% if monitor_mail_cc %}
-additional_recipients:
-{% for recipient in monitor_mail_cc %}
-  - {{ recipient }}
-{% endfor %}
-{% else %}
-additional_recipients: []
-{% endif %}
+  subscriber_store: {{ monitor_telegram_subscriber_store }}
+  poll_updates: {{ monitor_telegram_auto_register | bool | string | lower }}
+    api_base: {{ monitor_telegram_api_base }}
+    request_timeout: {{ monitor_telegram_request_timeout }}
+  mail:
+    enabled: {{ monitor_mail_enabled | bool | string | lower }}
+    recipients:
+{{ (monitor_mail_to | default(['root@localhost'])) | to_yaml | indent(6, True) }}
+    sender: {{ monitor_mail_from }}
+    subject_prefix: {{ monitor_mail_subject }}
+    cc:
+{{ (monitor_mail_cc | default([])) | to_yaml | indent(6, True) }}

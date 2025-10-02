@@ -6,11 +6,13 @@ monitor_memory_threshold: 0.95
 monitor_docker_service: docker
 monitor_required_packages:
   - sysstat
-  - mailutils
   - curl
   - python3-venv
+monitor_mail_packages:
+  - mailutils
   - exim4
-monitor_mta_manage: true
+monitor_mail_enabled: false
+monitor_mta_manage: "{{ monitor_mail_enabled }}"
 monitor_mta_configtype: internet
 monitor_mta_mailname: "{{ inventory_hostname }}"
 monitor_mta_other_hostnames: []
@@ -52,6 +54,15 @@ monitor_mail_to:
 monitor_mail_from: spondex-monitor@localhost
 monitor_mail_subject: "[Spondex Monitor]"
 monitor_mail_cc: []
+monitor_telegram_enabled: true
+monitor_telegram_chat_ids:
+  - "8365606127"
+monitor_telegram_bot_token_env: TG_BOT_TOKEN
+monitor_telegram_api_base: https://api.telegram.org
+monitor_telegram_request_timeout: 10
+monitor_telegram_bot_token: ""
+monitor_telegram_auto_register: true
+monitor_telegram_subscriber_store: "{{ monitor_state_path | dirname }}/telegram_subscribers.json"
 monitor_timer_interval: 5m
 monitor_overwrite_config: false
 monitor_uv_version: "0.4.10"

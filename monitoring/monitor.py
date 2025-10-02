@@ -12,7 +12,7 @@ from pathlib import Path
 
 from monitoring.checks import Alert, CheckContext, run_checks
 from monitoring.config import load_config
-from monitoring.notifier import send_alert_email
+from monitoring.notifier import send_notifications
 from monitoring.storage import Metric, StateStore
 
 
@@ -22,13 +22,16 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Spondex monitoring checks")
     parser.add_argument("--config", type=str, help="Path to monitoring config YAML", default=None)
-    parser.add_argument("--email", dest="email", action="store_true", help="Send alert emails if thresholds are exceeded")
-    parser.add_argument("--no-email", dest="email", action="store_false", help="Disable email sending for this run")
-    parser.set_defaults(email=None)
+    parser.add_argument("--email", dest="email", action="store_true", help="Enable email notifications for this run")
+    parser.add_argument("--no-email", dest="email", action="store_false", help="Disable email notifications for this run")
+    parser.add_argument("--telegram", dest="telegram", action="store_true", help="Enable Telegram notifications for this run")
+    parser.add_argument("--no-telegram", dest="telegram", action="store_false", help="Disable Telegram notifications for this run")
+    parser.set_defaults(email=None, telegram=None)
     parser.add_argument("--print", dest="print_report", action="store_true", help="Print alerts and metrics to stdout (default)")
     parser.add_argument("--no-print", dest="print_report", action="store_false", help="Suppress stdout output")
     parser.set_defaults(print_report=None)
-    parser.add_argument("--test-email", action="store_true", help="Send a test email with current metrics")
+    parser.add_argument("--test-notify", action="store_true", help="Send a test notification using all enabled channels")
+    parser.add_argument("--test-email", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
@@ -68,9 +71,9 @@ def main() -> int:
         config = load_config()
 
     if args.email is not None:
-        config.enable_email = args.email
-    else:
-        config.enable_email = False
+        config.notification.mail.enabled = args.email
+    if args.telegram is not None:
+        config.notification.telegram.enabled = args.telegram
 
     now = datetime.now(UTC)
     store = StateStore(config.state_path)
@@ -88,19 +91,20 @@ def main() -> int:
     if should_print:
         print(report)
 
-    if args.test_email:
-        try:
-            send_alert_email(config, [], report)
-            print("Test email sent successfully.")
-        except Exception as exc:
-            print(f"Failed to send test email: {exc}", file=sys.stderr)
+    test_requested = args.test_notify or args.test_email
+    if test_requested:
+        errors = send_notifications(config, [], report, force=True)
+        if errors:
+            for err in errors:
+                print(f"Notification error: {err}", file=sys.stderr)
             return 2
+        print("Test notification sent successfully.")
         return 0
     elif alerts:
-        try:
-            send_alert_email(config, alerts, report)
-        except Exception as exc:  # pragma: no cover
-            print(f"Failed to send email: {exc}", file=sys.stderr)
+        errors = send_notifications(config, alerts, report)
+        if errors:  # pragma: no cover - network failure branch
+            for err in errors:
+                print(f"Notification error: {err}", file=sys.stderr)
             return 2
     return 0
 

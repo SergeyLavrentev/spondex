@@ -7,11 +7,12 @@ prototype. The monitoring job is implemented in Python and scheduled by
 ## Overview
 
 The entry point lives at `monitoring/monitor.py`. It collects runtime metrics,
-records them in a local SQLite database for 365 days, and emits alert e-mails
-through the local MTA when thresholds are breached. When invoked manually with
-no flags the script reads `monitoring/config.yaml`, prints the full report to
-stdout, and skips e-mail delivery. Pass `--email` to opt back into
-notifications (the systemd service does this automatically).
+records them in a local SQLite database for 365 days, and ships alerts through
+a Telegram bot by default (SMTP fallback is optional). When invoked manually
+with no flags the script reads `monitoring/config.yaml`, prints the full report
+to stdout, and skips network delivery. Pass `--telegram` and/or `--email` to
+enable notification channels (the systemd service opts into Telegram
+automatically and respects the e-mail flag rendered in the config).
 
 Key checks implemented:
 
@@ -57,8 +58,17 @@ overridden per environment. Notable options:
 - `monitor_disk_usage`: mount points to watch, percentage thresholds and the
   minimal free space (GiB) before triggering alerts.
 - `monitor_log_files`: log paths and error patterns.
-- `monitor_mail_to`, `monitor_mail_from`, `monitor_mail_subject`: e-mail
-  recipients and message metadata.
+- `notification.telegram.chat_ids`, `notification.telegram.token_env` or
+  `notification.telegram.token`: Telegram бот отправляет уведомления всем
+  chat_id из массива и подписчикам, зарегистрированным через `/start`.
+  Токен обычно хранится в переменной окружения `TG_BOT_TOKEN`.
+- `notification.telegram.subscriber_store`: путь к JSON-файлу со списком
+  подписчиков и `last_update_id`. По умолчанию лежит рядом со state.db.
+- `notification.telegram.poll_updates`: включает авто-регистрацию — бот раз в
+  запуск читает `getUpdates` и добавляет всех, кто написал `/start` в личку.
+- `notification.mail.enabled`, `notification.mail.to`,
+  `notification.mail.from`, `notification.mail.subject`: SMTP fallback toggle
+  and message metadata when the mail channel is enabled.
 - `monitor_timer_interval`: systemd timer cadence (default 5 minutes).
 - `monitor_overwrite_config`: when `true`, Ansible will re-render
   `/opt/spondex/monitoring/config.yaml`; keep it `false` to preserve manual
@@ -72,7 +82,8 @@ overridden per environment. Notable options:
 
 The `monitoring` role (see `ansible/roles/monitoring`) performs the following:
 
-1. Installs required packages (`sysstat`, `mailutils`).
+1. Installs required packages (`sysstat`, `curl`, `python3-venv`) and, when the
+  mail channel is enabled, pulls in `mailutils` + `exim4`.
 2. Creates the state directory (`/var/lib/spondex-monitor`).
 3. Marks the monitoring script executable and drops the templated config.
 4. Installs `systemd` service + timer units and enables the timer.
@@ -103,6 +114,8 @@ per-environment, for example:
 
 ```bash
 ansible-playbook -i inventory/prod ansible/deploy.yml \
+  --extra-vars "monitor_telegram_chat_ids=['123456789']" \
+  --extra-vars "monitor_mail_enabled=true" \
   --extra-vars "monitor_mail_to=['alerts@example.com']" \
   --extra-vars "monitor_timer_interval=10m"
 ```
@@ -129,11 +142,17 @@ sudo systemctl start spondex-monitor.service
   journalctl -u spondex-monitor.service -n 50
   ```
 
-- Print the metrics and alerts without e-mail side effects (useful for smoke
-  tests):
+- Print the metrics and alerts without triggering notifications (useful for
+  smoke tests):
 
   ```bash
   sudo /opt/spondex/monitoring/monitor.py --config /opt/spondex/monitoring/config.yaml
+  ```
+
+- Send a one-off test message to configured channels:
+
+  ```bash
+  sudo /opt/spondex/monitoring/monitor.py --config /opt/spondex/monitoring/config.yaml --test-notify --telegram
   ```
 
 - Inspect the SQLite store to confirm the timer is writing samples:
@@ -163,7 +182,7 @@ will pick up the new thresholds automatically.
 
 2. Adjust the desired fields under the **Thresholds** section (`load_window_minutes`,
    `memory_threshold`, `disk_devices[*].max_iops`, etc.) or add/remove entries in
-   `log_checks`, `app_checks`, `notification.mail_to`.
+  `log_checks`, `app_checks`, `notification.telegram.chat_ids`.
 
 3. Save the file and optionally run a dry check to validate parsing:
 
@@ -182,25 +201,48 @@ will pick up the new thresholds automatically.
 > executed with `monitor_overwrite_config=true`. Record long-term adjustments in
 > inventory variables to keep them persistent.
 
-## Email delivery
+## Notification channels
 
-The script connects to `localhost:25`. Make sure Postfix or another MTA is
-configured to relay mail from the server. Recipients can be amended with the
-`monitor_mail_cc` variable.
+### Telegram (по умолчанию)
+
+- Укажите ID чатов в `monitor_telegram_chat_ids` (или задайте их напрямую в
+  `notification.telegram.chat_ids` при ручном редактировании конфига).
+- Токен бота передаётся через переменную окружения `TG_BOT_TOKEN`
+  (`notification.telegram.token_env`). Для локальных тестов можно временно
+  записать значение в `notification.telegram.token`, но хранить токен в файле
+  на сервере не рекомендуется.
+- Systemd unit пробрасывает токен из окружения (секрет `DEPLOY_TG_BOT_TOKEN`
+  в CI). Скрипт валидирует наличие токена и чат-идов перед отправкой.
+- Если `notification.telegram.poll_updates=true`, бот автоматически добавляет
+  в конфиг всех пользователей, которые в личке нажали `/start`. Список хранится
+  в `notification.telegram.subscriber_store` (JSON).
+
+### SMTP fallback (опционально)
+
+- Включите канал, выставив `monitor_mail_enabled=true` (или
+  `notification.mail.enabled=true`). Тогда роль установит `mailutils` и `exim4`
+  и добавит почтовую секцию в конфиг.
+- Получатели/заголовки управляются через `monitor_mail_to`,
+  `monitor_mail_from`, `monitor_mail_subject`, дополнительные копии — через
+  `monitor_mail_cc`.
+- Сообщения отправляются на `localhost:25`; убедитесь, что MTA настроен на
+  доставку во внешние домены или нужный релей.
 
 ## Local testing
 
-Run the script locally with:
+Запустите скрипт локально с нужными каналами:
 
 ```bash
-python -m monitoring.monitor --config monitoring/config.sample.yaml
+python -m monitoring.monitor --config monitoring/config.sample.yaml --telegram
 ```
 
-The command prints the collected metrics and any alerts without attempting to
-send mail. On the production host the script is executable, so you can run it
-directly as `sudo /opt/spondex/monitoring/monitor.py` to trigger an ad-hoc
-collection without remembering any UV-specific incantations. Unit tests live in
-`tests/test_monitoring_checks.py` and can be executed via `pytest`.
+Добавьте `--email`, если нужно проверить SMTP. Флаг `--test-notify` выполнит
+проверку конфигурации и отослёт короткое сообщение в выбранные каналы.
+
+На продакшене скрипт исполняемый, поэтому его можно запускать напрямую как
+`sudo /opt/spondex/monitoring/monitor.py` для ручного сбора метрик.
+Юнит-тесты живут в `tests/test_monitoring_checks.py` и `tests/test_notifier.py`
+и запускаются через `pytest`.
 
 For integration coverage, Molecule сценарий роли находится в
 `ansible/roles/monitoring/molecule/default`. Локально запускайте его в отдельном
