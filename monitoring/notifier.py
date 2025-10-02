@@ -15,6 +15,161 @@ from .checks import Alert
 from .config import Config
 
 
+def _send_telegram_payload(
+    config: Config,
+    token: str,
+    payload: dict[str, object],
+    *,
+    timeout: float,
+) -> dict:
+    url = _telegram_endpoint(config, token)
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "ignore") if hasattr(exc, "read") else str(exc)
+        raise RuntimeError(f"Telegram HTTP error {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Telegram network error: {exc.reason}") from exc
+
+    if not data.get("ok", False):
+        raise RuntimeError(f"Telegram API error: {data}")
+    return data
+
+
+def _send_telegram_message(
+    config: Config,
+    token: str,
+    chat_id: str,
+    text: str,
+    *,
+    timeout: float,
+    disable_preview: bool = True,
+) -> None:
+    payload = {
+        "chat_id": chat_id,
+        "text": _truncate_for_telegram(text),
+    }
+    if disable_preview:
+        payload["disable_web_page_preview"] = True
+    _send_telegram_payload(config, token, payload, timeout=timeout)
+
+
+def _format_container_names(config: Config) -> Optional[str]:
+    if not config.app_checks:
+        return None
+    names = {check.display_name or check.container_name for check in config.app_checks}
+    if not names:
+        return None
+    return ", ".join(sorted(names))
+
+
+def _format_disk_usage_targets(config: Config) -> Optional[str]:
+    if not config.disk_usage_checks:
+        return None
+    items = []
+    for check in config.disk_usage_checks:
+        label = check.name
+        path = str(check.path)
+        if path:
+            label = f"{label} ({path})"
+        items.append(label)
+    return ", ".join(items) if items else None
+
+
+def _format_log_targets(config: Config) -> Optional[str]:
+    if not config.log_checks:
+        return None
+    items = [str(log.path) for log in config.log_checks]
+    return ", ".join(items) if items else None
+
+
+def _build_welcome_message(config: Config) -> str:
+    bullet_lines = [
+        "• загрузкой CPU (1, 5 и 15 минут), использованием памяти и событиями OOM",
+        "• перезагрузками сервера и статусом docker.service",
+    ]
+
+    containers = _format_container_names(config)
+    if containers:
+        bullet_lines.append(f"• контейнерами приложения: {containers}")
+
+    bullet_lines.append(
+        f"• PostgreSQL ({config.db_check.container_name}) — контейнер, порт и проверочный SELECT 1"
+    )
+
+    disk_usage = _format_disk_usage_targets(config)
+    if disk_usage:
+        bullet_lines.append(f"• заполнением дисков: {disk_usage}")
+
+    if config.disk_devices:
+        devices = ", ".join(sorted({device.name for device in config.disk_devices}))
+        bullet_lines.append(f"• IOPS на устройствах: {devices}")
+
+    logs = _format_log_targets(config)
+    if logs:
+        bullet_lines.append(f"• ошибками в логах: {logs}")
+
+    lines = [
+        "Привет! Это бот мониторинга Spondex.",
+        "Я слежу за продовой инфраструктурой и присылаю алерты, если что-то идёт не так.",
+        "",
+        "Слежу за:",
+        *bullet_lines,
+        "",
+        "Чтобы проверить доставку вручную, на сервере можно выполнить python -m monitoring.monitor --test-notify.",
+    ]
+    return "\n".join(lines)
+
+
+def _welcome_new_subscribers(
+    config: Config,
+    token: str,
+    chat_ids: Set[str],
+    *,
+    timeout: float,
+) -> None:
+    if not chat_ids:
+        return
+    message = _build_welcome_message(config)
+    for chat_id in sorted(chat_ids):
+        _send_telegram_message(config, token, chat_id, message, timeout=timeout)
+
+
+def _sync_subscriber_store(
+    config: Config,
+    token: str,
+    *,
+    allow_poll: bool,
+) -> Tuple[List[str], Optional[int]]:
+    tg_cfg = config.notification.telegram
+    if not tg_cfg.subscriber_store:
+        return [], None
+
+    subscriber_path = Path(tg_cfg.subscriber_store)
+    subscribers, last_update_id = _load_subscriber_state(subscriber_path)
+    new_chat_ids: Set[str] = set()
+    if allow_poll and tg_cfg.poll_updates:
+        subscribers, last_update_id, new_chat_ids = _poll_telegram_updates(
+            config,
+            token,
+            chat_ids=subscribers,
+            last_update_id=last_update_id,
+        )
+        if new_chat_ids:
+            _welcome_new_subscribers(config, token, new_chat_ids, timeout=tg_cfg.request_timeout)
+
+    _write_subscriber_state(subscriber_path, subscribers, last_update_id)
+    sorted_ids = sorted(subscribers)
+    return sorted_ids, last_update_id
+
+
 def _unique(sequence: Iterable[str]) -> List[str]:
     return list(dict.fromkeys(sequence))
 
@@ -49,7 +204,13 @@ def _write_subscriber_state(path: Path, chat_ids: Set[str], last_update_id: Opti
     tmp_path.replace(path)
 
 
-def _poll_telegram_updates(config: Config, token: str, *, chat_ids: Set[str], last_update_id: Optional[int]) -> Tuple[Set[str], Optional[int]]:
+def _poll_telegram_updates(
+    config: Config,
+    token: str,
+    *,
+    chat_ids: Set[str],
+    last_update_id: Optional[int],
+) -> Tuple[Set[str], Optional[int], Set[str]]:
     base = config.notification.telegram.api_base.rstrip("/")
     query: dict[str, str] = {"timeout": "0"}
     if last_update_id is not None:
@@ -71,6 +232,7 @@ def _poll_telegram_updates(config: Config, token: str, *, chat_ids: Set[str], la
         raise RuntimeError(f"Telegram API error on getUpdates: {data}")
 
     max_update_id = last_update_id
+    new_chat_ids: Set[str] = set()
     for update in data.get("result", []):
         update_id = update.get("update_id")
         if isinstance(update_id, int):
@@ -87,9 +249,12 @@ def _poll_telegram_updates(config: Config, token: str, *, chat_ids: Set[str], la
             continue
         chat_id = chat.get("id")
         if chat_id is not None:
-            chat_ids.add(str(chat_id))
+            chat_id_str = str(chat_id)
+            if chat_id_str not in chat_ids:
+                new_chat_ids.add(chat_id_str)
+            chat_ids.add(chat_id_str)
 
-    return chat_ids, max_update_id
+    return chat_ids, max_update_id, new_chat_ids
 
 
 def build_email(config: Config, alerts: Iterable[Alert], body: str) -> EmailMessage:
@@ -147,54 +312,36 @@ def send_alert_telegram(config: Config, alerts: list[Alert], body: str, *, force
             f"Telegram bot token not provided (env {tg_cfg.bot_token_env} is empty and no inline token configured)"
         )
 
-    subscriber_chat_ids: List[str] = []
-    last_update_id: Optional[int] = None
-    subscriber_path: Optional[Path] = None
-    if tg_cfg.subscriber_store:
-        subscriber_path = Path(tg_cfg.subscriber_store)
-        subscribers, last_update_id = _load_subscriber_state(subscriber_path)
-        if tg_cfg.poll_updates:
-            subscribers, last_update_id = _poll_telegram_updates(
-                config,
-                token,
-                chat_ids=subscribers,
-                last_update_id=last_update_id,
-            )
-        subscriber_chat_ids = sorted(subscribers)
-        if subscriber_path:
-            _write_subscriber_state(subscriber_path, set(subscriber_chat_ids), last_update_id)
+    subscriber_chat_ids, _ = _sync_subscriber_store(config, token, allow_poll=True)
 
     chat_id_candidates = _unique(list(tg_cfg.chat_ids) + subscriber_chat_ids)
     if not chat_id_candidates:
         raise RuntimeError("Telegram chat_ids list is empty")
 
-    url = _telegram_endpoint(config, token)
-    payload_text = _truncate_for_telegram(body)
-    payload_common = {
-        "text": payload_text,
-        "disable_web_page_preview": True,
-    }
-
     for chat_id in chat_id_candidates:
-        payload = dict(payload_common, chat_id=chat_id)
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        _send_telegram_message(
+            config,
+            token,
+            chat_id,
+            body,
+            timeout=tg_cfg.request_timeout,
         )
-        try:
-            with urllib.request.urlopen(req, timeout=tg_cfg.request_timeout) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "ignore") if hasattr(exc, "read") else str(exc)
-            raise RuntimeError(f"Telegram HTTP error {exc.code}: {detail}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"Telegram network error: {exc.reason}") from exc
 
-        if not data.get("ok", False):
-            raise RuntimeError(f"Telegram API error: {data}")
+    return True
 
+
+def poll_telegram_subscribers(config: Config) -> bool:
+    tg_cfg = config.notification.telegram
+    if not tg_cfg.enabled or not tg_cfg.poll_updates or not tg_cfg.subscriber_store:
+        return False
+
+    token = tg_cfg.token or os.environ.get(tg_cfg.bot_token_env)
+    if not token:
+        raise RuntimeError(
+            f"Telegram bot token not provided (env {tg_cfg.bot_token_env} is empty and no inline token configured)"
+        )
+
+    _sync_subscriber_store(config, token, allow_poll=True)
     return True
 
 
@@ -223,5 +370,6 @@ __all__ = [
     "build_email",
     "send_alert_email",
     "send_alert_telegram",
+    "poll_telegram_subscribers",
     "send_notifications",
 ]

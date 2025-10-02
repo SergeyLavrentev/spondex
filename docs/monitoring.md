@@ -12,7 +12,10 @@ a Telegram bot by default (SMTP fallback is optional). When invoked manually
 with no flags the script reads `monitoring/config.yaml`, prints the full report
 to stdout, and skips network delivery. Pass `--telegram` and/or `--email` to
 enable notification channels (the systemd service opts into Telegram
-automatically and respects the e-mail flag rendered in the config).
+automatically and respects the e-mail flag rendered in the config). Every run
+performs a lightweight `getUpdates` poll (when enabled) so that new users who
+press `/start` instantly receive a welcome brief about tracked checks and are
+added to the subscriber store.
 
 Key checks implemented:
 
@@ -86,7 +89,10 @@ The `monitoring` role (see `ansible/roles/monitoring`) performs the following:
   mail channel is enabled, pulls in `mailutils` + `exim4`.
 2. Creates the state directory (`/var/lib/spondex-monitor`).
 3. Marks the monitoring script executable and drops the templated config.
-4. Installs `systemd` service + timer units and enables the timer.
+4. Installs `systemd` service + timer units and enables the timer. The unit now
+  executes a post-step that calls `monitoring/monitor.py --poll-telegram-updates`
+  to refresh Telegram subscribers (it exits immediately when polling is
+  disabled in the config).
 
 The main playbook (`ansible/deploy.yml`) imports the role after the application
 stack is deployed, ensuring the script and configuration are present on the
@@ -155,6 +161,13 @@ sudo systemctl start spondex-monitor.service
   sudo /opt/spondex/monitoring/monitor.py --config /opt/spondex/monitoring/config.yaml --test-notify --telegram
   ```
 
+- Force a Telegram poll without collecting metrics (updates welcome messages
+  and the subscriber store only):
+
+  ```bash
+  sudo /opt/spondex/monitoring/monitor.py --config /opt/spondex/monitoring/config.yaml --poll-telegram-updates
+  ```
+
 - Inspect the SQLite store to confirm the timer is writing samples:
 
   ```bash
@@ -215,7 +228,12 @@ will pick up the new thresholds automatically.
   в CI). Скрипт валидирует наличие токена и чат-идов перед отправкой.
 - Если `notification.telegram.poll_updates=true`, бот автоматически добавляет
   в конфиг всех пользователей, которые в личке нажали `/start`. Список хранится
-  в `notification.telegram.subscriber_store` (JSON).
+  в `notification.telegram.subscriber_store` (JSON). При регистрации подписчик
+  получает приветственное сообщение с описанием мониторинга и подсказкой про
+  `--test-notify`.
+- Флаг `--poll-telegram-updates` запускает только синхронизацию подписчиков и
+  используется `systemd`-юнитом после основного запуска. Инструмент можно
+  вызывать вручную для хаотичного синка или при отладке Telegram.
 
 ### SMTP fallback (опционально)
 

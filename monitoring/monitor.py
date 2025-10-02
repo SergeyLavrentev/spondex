@@ -12,7 +12,7 @@ from pathlib import Path
 
 from monitoring.checks import Alert, CheckContext, run_checks
 from monitoring.config import load_config
-from monitoring.notifier import send_notifications
+from monitoring.notifier import poll_telegram_subscribers, send_notifications
 from monitoring.storage import Metric, StateStore
 
 
@@ -32,6 +32,11 @@ def parse_args() -> argparse.Namespace:
     parser.set_defaults(print_report=None)
     parser.add_argument("--test-notify", action="store_true", help="Send a test notification using all enabled channels")
     parser.add_argument("--test-email", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--poll-telegram-updates",
+        action="store_true",
+        help="Poll Telegram updates to refresh subscribers and exit",
+    )
     return parser.parse_args()
 
 
@@ -74,6 +79,18 @@ def main() -> int:
         config.notification.mail.enabled = args.email
     if args.telegram is not None:
         config.notification.telegram.enabled = args.telegram
+
+    if args.poll_telegram_updates:
+        try:
+            polled = poll_telegram_subscribers(config)
+        except RuntimeError as exc:
+            print(f"Telegram polling failed: {exc}", file=sys.stderr)
+            return 2
+        if polled:
+            print("Telegram subscribers refreshed.")
+        else:
+            print("Telegram polling disabled in config; nothing to do.")
+        return 0
 
     now = datetime.now(UTC)
     store = StateStore(config.state_path)
