@@ -44,6 +44,10 @@ notification:
     chat_ids:
       - "8365606127"
     bot_token_env: TG_BOT_TOKEN
+    subscriber_store: /var/lib/spondex-monitor/telegram_subscribers.json
+    poll_updates: true
+    api_base: https://api.telegram.org
+    request_timeout: 10
   mail:
     enabled: false
     recipients:

@@ -1,7 +1,8 @@
 [Unit]
 Description=Spondex monitoring job
-Requires={{ monitor_docker_service }}
-After={{ monitor_docker_service }}
+{% set docker_unit = monitor_docker_service if monitor_docker_service.endswith('.service') else monitor_docker_service ~ '.service' %}
+Requires={{ docker_unit }}
+After={{ docker_unit }}
 
 [Service]
 Type=oneshot
