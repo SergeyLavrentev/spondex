@@ -51,6 +51,13 @@
              | default(ansible_facts.get('distribution_release'))
              | default('') }}
 
+    - name: Evaluate backports support for Python {{ python_major_minor }}
+      ansible.builtin.set_fact:
+        python_backports_supported: >-
+          {{ ansible_facts['os_family'] == 'Debian'
+             and python_distribution_codename | length > 0
+             and (python_distribution_codename not in ['trixie', 'testing', 'unstable', 'sid']) }}
+
     - name: Enable Debian backports repository for Python {{ python_major_minor }}
       ansible.builtin.deb822_repository:
         name: debian-backports
@@ -60,8 +67,7 @@
         components: [main]
         state: present
       when:
-        - ansible_facts['os_family'] == 'Debian'
-        - python_distribution_codename | length > 0
+        - python_backports_supported | default(false)
 
     - name: Ensure deadsnakes PPA is present on Ubuntu
       ansible.builtin.apt_repository:
@@ -74,8 +80,7 @@
       ansible.builtin.set_fact:
         python_apt_default_release: "{{ python_distribution_codename }}-backports"
       when:
-        - ansible_facts['os_family'] == 'Debian'
-        - python_distribution_codename | length > 0
+        - python_backports_supported | default(false)
 
     - name: Install Python {{ python_major_minor }} packages
       ansible.builtin.apt:
