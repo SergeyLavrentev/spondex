@@ -26,7 +26,7 @@ provisioner:
     ANSIBLE_CONFIG: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../ansible.cfg"
     ANSIBLE_COLLECTIONS_PATH: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../collections:/usr/share/ansible/collections"
     ANSIBLE_ROLES_PATH: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../"
-    ANSIBLE_REMOTE_TMP: /tmp/ansible
+  ANSIBLE_REMOTE_TMP: /tmp
   config_options:
     defaults:
       roles_path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../"
