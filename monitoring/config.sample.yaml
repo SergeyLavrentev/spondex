@@ -4,7 +4,7 @@
 # systemd run will pick up the changes. Ansible will only overwrite the live
 # file when run with monitor_overwrite_config=true.
 
-state_path: /var/lib/spondex-monitor/state.db
+state_path: /tmp/spondex-monitor/state.db
 retention_days: 365
 cpu_cores: null  # autodetect when null
 
@@ -44,7 +44,7 @@ notification:
     chat_ids:
       - "8365606127"
     bot_token_env: TG_BOT_TOKEN
-    subscriber_store: /var/lib/spondex-monitor/telegram_subscribers.json
+    subscriber_store: /tmp/spondex-monitor/telegram_subscribers.json
     poll_updates: true
     api_base: https://api.telegram.org
     request_timeout: 10

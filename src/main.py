@@ -5,11 +5,13 @@ import logging
 import os
 import random
 import time
+import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple
 
 import spotipy
 from dotenv import load_dotenv
+from flask import Flask, jsonify
 from spotipy.oauth2 import SpotifyOAuth
 from yandex_music import Client as YandexClient
 from yandex_music.exceptions import YandexMusicError
@@ -108,6 +110,37 @@ def check_and_fix_spotify_cache():
                 logger.warning("Не удалось удалить некорректный кэш Spotify: %s", cleanup_error)
     except Exception as e:
         logger.error(f"Ошибка при проверке кэш файла: {e}")
+
+
+# Flask application for status endpoint
+app = Flask(__name__)
+
+@app.route('/status')
+def status():
+    """Health check and metrics endpoint for monitoring."""
+    try:
+        # Basic health check
+        health_data = {
+            "status": "healthy",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "service": "spondex",
+            "version": "1.0.0"
+        }
+        
+        # Add some basic metrics if available
+        # This is a simple implementation - in production you might want more detailed metrics
+        health_data["metrics"] = {
+            "uptime_seconds": int(time.time() - getattr(app, '_start_time', time.time())),
+        }
+        
+        return jsonify(health_data), 200
+    except Exception as e:
+        logger.error(f"Error in /status endpoint: {e}")
+        return jsonify({
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        }), 500
 
 
 class YandexMusic(MusicService):
@@ -563,16 +596,21 @@ class YandexMusic(MusicService):
                     continue
                 title = None
                 artist_name = None
+                album_id = None
                 track_obj = getattr(playlist_track, "track", None)
                 if track_obj:
                     title = getattr(track_obj, "title", None)
                     artist_name = _join_artist_names(getattr(track_obj, "artists", []))
+                    albums = getattr(track_obj, "albums", [])
+                    if albums:
+                        album_id = str(getattr(albums[0], "id", ""))
                 added_at = _parse_datetime(getattr(playlist_track, "timestamp", None))
                 tracks.append(
                     PlaylistTrack(
                         track_id=str(track_id),
                         title=title,
                         artist=artist_name,
+                        album_id=album_id,
                         position=position,
                         added_at=added_at,
                     )
@@ -1326,11 +1364,24 @@ class MusicSynchronizer:
                 continue
 
             tracks_attr = getattr(yandex_playlist, "tracks", []) or []
-            existing_ids = {
-                str(getattr(track_obj, "track_id", ""))
-                for track_obj in tracks_attr
-                if getattr(track_obj, "track_id", None)
-            }
+            existing_ids = set()
+            for track_obj in tracks_attr:
+                track_id = getattr(track_obj, "track_id", None)
+                if not track_id:
+                    continue
+                # Try to get album_id from the track object
+                album_id = None
+                track_detail = getattr(track_obj, "track", None)
+                if track_detail:
+                    albums = getattr(track_detail, "albums", [])
+                    if albums:
+                        album_id = str(getattr(albums[0], "id", ""))
+                if album_id:
+                    composite_id = f"{track_id}:{album_id}"
+                    existing_ids.add(composite_id)
+                else:
+                    # Fallback to just track_id if album_id not available
+                    existing_ids.add(str(track_id))
 
             additions = 0
             for item in playlist.tracks:
@@ -1376,12 +1427,10 @@ class MusicSynchronizer:
                 if updated_playlist:
                     yandex_playlist = updated_playlist
 
-                tracks_attr = getattr(yandex_playlist, "tracks", []) or []
-                existing_ids = {
-                    str(getattr(track_obj, "track_id", ""))
-                    for track_obj in tracks_attr
-                    if getattr(track_obj, "track_id", None)
-                }
+                # Update existing_ids with the new track
+                if album_part:
+                    new_composite = f"{track_part}:{album_part}"
+                    existing_ids.add(new_composite)
                 additions += 1
 
             if additions:
@@ -1646,6 +1695,12 @@ def main():
     yandex_service = YandexMusic(db_manager, yandex_token)
     spotify_service = SpotifyMusic(db_manager)
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
+
+    # Start web server in background thread
+    app._start_time = time.time()
+    web_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8888, debug=False, use_reloader=False), daemon=True)
+    web_thread.start()
+    logger.info("Веб-сервер запущен на порту 8888")
 
     try:
         first_run = True

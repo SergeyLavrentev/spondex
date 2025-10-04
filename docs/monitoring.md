@@ -32,6 +32,9 @@ Key checks implemented:
   `spondex-app-1`) are running.
 - **Database container & port**: checks Docker state, confirms that port 5432 is
   open on `127.0.0.1`, and executes `SELECT 1` inside the Postgres container.
+- **Application /status endpoint**: queries the application's health check API
+  at `http://127.0.0.1:8888/status`, validates JSON response structure, and
+  alerts on HTTP errors, unhealthy status, or malformed responses.
 - **Application logs**: tails configured log files and looks for `Traceback` (or
   custom patterns). Offsets are persisted to survive rotations.
 - **Server reboots**: compares the current boot timestamp with the stored value

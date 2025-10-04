@@ -10,6 +10,7 @@ class PlaylistTrack:
     track_id: str
     title: Optional[str] = None
     artist: Optional[str] = None
+    album_id: Optional[str] = None
     position: Optional[int] = None
     added_at: Optional[datetime] = None
 

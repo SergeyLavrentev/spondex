@@ -10,6 +10,11 @@ from typing import List
 
 from pathlib import Path
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from dotenv import load_dotenv
+
 from monitoring.checks import Alert, CheckContext, run_checks
 from monitoring.config import load_config
 from monitoring.notifier import poll_telegram_subscribers, send_notifications
@@ -68,6 +73,9 @@ def format_report(now: datetime, alerts: List[Alert], metrics: List[Metric]) -> 
 
 
 def main() -> int:
+    # Load environment variables from .env file
+    load_dotenv()
+    
     args = parse_args()
     config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
     if config_path.exists():

@@ -6,6 +6,7 @@ from pathlib import Path
 import monitoring.checks as checks
 from monitoring.checks import (
     CheckContext,
+    check_app_status,
     check_disk_iops,
     check_disk_usage,
     check_load,
@@ -99,3 +100,168 @@ def test_disk_usage_missing_path(tmp_path, monkeypatch):
     metrics, alerts = check_disk_usage(CheckContext(config, store, now))
     assert any(metric.name == "disk_usage_status_bad" and metric.value == "FAIL" for metric in metrics)
     assert any(alert.name == "disk_path_missing" for alert in alerts)
+
+
+def test_check_app_status_healthy(tmp_path, monkeypatch):
+    config = Config()
+    store = StateStore(tmp_path / "state.db")
+    now = datetime.now(UTC)
+
+    def mock_get(url, timeout=None):
+        MockResponse = namedtuple('MockResponse', ['status_code', 'json', 'text'])
+        response = MockResponse(
+            status_code=200,
+            json=lambda: {
+                "status": "healthy",
+                "timestamp": "2025-10-04T15:51:14.782701+00:00",
+                "service": "spondex",
+                "version": "1.0.0",
+                "metrics": {"uptime_seconds": 3600}
+            },
+            text=""
+        )
+        return response
+
+    monkeypatch.setattr(checks.requests, "get", mock_get)
+
+    metrics, alerts = check_app_status(CheckContext(config, store, now))
+    
+    # Check metrics
+    metric_names = {metric.name: metric.value for metric in metrics}
+    assert "app_status_latency_ms" in metric_names
+    assert metric_names["app_status_http_code"] == 200
+    assert metric_names["app_status_health"] == "OK"
+    assert metric_names["app_uptime_seconds"] == "3600"
+    
+    # No alerts for healthy status
+    assert alerts == []
+
+
+def test_check_app_status_unhealthy(tmp_path, monkeypatch):
+    config = Config()
+    store = StateStore(tmp_path / "state.db")
+    now = datetime.now(UTC)
+
+    def mock_get(url, timeout=None):
+        MockResponse = namedtuple('MockResponse', ['status_code', 'json', 'text'])
+        response = MockResponse(
+            status_code=200,
+            json=lambda: {
+                "status": "unhealthy",
+                "timestamp": "2025-10-04T15:51:14.782701+00:00",
+                "service": "spondex",
+                "version": "1.0.0"
+            },
+            text=""
+        )
+        return response
+
+    monkeypatch.setattr(checks.requests, "get", mock_get)
+
+    metrics, alerts = check_app_status(CheckContext(config, store, now))
+    
+    # Check metrics
+    metric_names = {metric.name: metric.value for metric in metrics}
+    assert metric_names["app_status_http_code"] == 200
+    assert metric_names["app_status_health"] == "FAIL"
+    
+    # Should have unhealthy alert
+    assert any(alert.name == "app_status_unhealthy" for alert in alerts)
+
+
+def test_check_app_status_http_error(tmp_path, monkeypatch):
+    config = Config()
+    store = StateStore(tmp_path / "state.db")
+    now = datetime.now(UTC)
+
+    def mock_get(url, timeout=None):
+        MockResponse = namedtuple('MockResponse', ['status_code', 'text'])
+        response = MockResponse(status_code=500, text="Internal Server Error")
+        return response
+
+    monkeypatch.setattr(checks.requests, "get", mock_get)
+
+    metrics, alerts = check_app_status(CheckContext(config, store, now))
+    
+    # Check metrics
+    metric_names = {metric.name: metric.value for metric in metrics}
+    assert metric_names["app_status_http_code"] == 500
+    assert metric_names["app_status_health"] == "FAIL"
+    
+    # Should have HTTP error alert
+    assert any(alert.name == "app_status_http_error" for alert in alerts)
+
+
+def test_check_app_status_connection_error(tmp_path, monkeypatch):
+    config = Config()
+    store = StateStore(tmp_path / "state.db")
+    now = datetime.now(UTC)
+
+    def mock_get(url, timeout=None):
+        raise checks.requests.ConnectionError("Connection refused")
+
+    monkeypatch.setattr(checks.requests, "get", mock_get)
+
+    metrics, alerts = check_app_status(CheckContext(config, store, now))
+    
+    # Check metrics
+    metric_names = {metric.name: metric.value for metric in metrics}
+    assert metric_names["app_status_http_code"] == 0
+    assert metric_names["app_status_health"] == "FAIL"
+    
+    # Should have unreachable alert
+    assert any(alert.name == "app_status_unreachable" for alert in alerts)
+
+
+def test_check_app_status_invalid_json(tmp_path, monkeypatch):
+    config = Config()
+    store = StateStore(tmp_path / "state.db")
+    now = datetime.now(UTC)
+
+    def mock_get(url, timeout=None):
+        MockResponse = namedtuple('MockResponse', ['status_code', 'json', 'text'])
+        response = MockResponse(
+            status_code=200,
+            json=lambda: (_ for _ in ()).throw(ValueError("Invalid JSON")),
+            text="not json"
+        )
+        return response
+
+    monkeypatch.setattr(checks.requests, "get", mock_get)
+
+    metrics, alerts = check_app_status(CheckContext(config, store, now))
+    
+    # Check metrics
+    metric_names = {metric.name: metric.value for metric in metrics}
+    assert metric_names["app_status_http_code"] == 200
+    assert metric_names["app_status_health"] == "FAIL"
+    
+    # Should have invalid JSON alert
+    assert any(alert.name == "app_status_invalid_json" for alert in alerts)
+
+
+def test_check_app_status_missing_fields(tmp_path, monkeypatch):
+    config = Config()
+    store = StateStore(tmp_path / "state.db")
+    now = datetime.now(UTC)
+
+    def mock_get(url, timeout=None):
+        MockResponse = namedtuple('MockResponse', ['status_code', 'json', 'text'])
+        response = MockResponse(
+            status_code=200,
+            json=lambda: {"incomplete": "response"},
+            text=""
+        )
+        return response
+
+    monkeypatch.setattr(checks.requests, "get", mock_get)
+
+    metrics, alerts = check_app_status(CheckContext(config, store, now))
+    
+    # Check metrics
+    metric_names = {metric.name: metric.value for metric in metrics}
+    assert metric_names["app_status_http_code"] == 200
+    assert metric_names["app_status_health"] == "FAIL"
+    
+    # Should have missing fields alert
+    assert any(alert.name == "app_status_missing_fields" for alert in alerts)

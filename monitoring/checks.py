@@ -12,6 +12,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import List
 
+import requests
+
 from .config import Config
 from .storage import Metric, StateStore
 STATUS_OK = "OK"
@@ -210,6 +212,94 @@ def check_database_query(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
     return metrics, alerts
 
 
+def check_app_status(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
+    """Check application /status endpoint for health and metrics."""
+    alerts: List[Alert] = []
+    status_url = "http://127.0.0.1:8888/status"
+    
+    try:
+        start = time.monotonic()
+        response = requests.get(status_url, timeout=10)
+        elapsed = time.monotonic() - start
+        latency_ms = int(round(elapsed * 1000))
+        
+        # Basic metrics
+        metrics = [
+            Metric.from_value("app_status_latency_ms", latency_ms, ctx.now),
+            Metric("app_status_http_code", response.status_code, ctx.now),
+        ]
+        
+        # Check HTTP status
+        if response.status_code != 200:
+            alerts.append(Alert(
+                "app_status_http_error", 
+                f"Application /status returned HTTP {response.status_code}: {response.text[:200]}"
+            ))
+            metrics.append(Metric("app_status_health", "FAIL", ctx.now))
+            return metrics, alerts
+        
+        # Parse JSON response
+        try:
+            data = response.json()
+        except ValueError as e:
+            alerts.append(Alert(
+                "app_status_invalid_json", 
+                f"Application /status returned invalid JSON: {e}"
+            ))
+            metrics.append(Metric("app_status_health", "FAIL", ctx.now))
+            return metrics, alerts
+        
+        # Check required fields
+        required_fields = ["status", "timestamp", "service", "version"]
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            alerts.append(Alert(
+                "app_status_missing_fields", 
+                f"Application /status missing required fields: {missing_fields}"
+            ))
+            metrics.append(Metric("app_status_health", "FAIL", ctx.now))
+            return metrics, alerts
+        
+        # Check health status
+        health_status = data.get("status")
+        if health_status != "healthy":
+            alerts.append(Alert(
+                "app_status_unhealthy", 
+                f"Application reports unhealthy status: {health_status}"
+            ))
+            metrics.append(Metric("app_status_health", "FAIL", ctx.now))
+        else:
+            metrics.append(Metric("app_status_health", "OK", ctx.now))
+        
+        # Add uptime metric if available
+        if "metrics" in data and isinstance(data["metrics"], dict):
+            if "uptime_seconds" in data["metrics"]:
+                uptime = data["metrics"]["uptime_seconds"]
+                if isinstance(uptime, (int, float)):
+                    metrics.append(Metric.from_value("app_uptime_seconds", int(uptime), ctx.now))
+        
+    except requests.RequestException as e:
+        alerts.append(Alert(
+            "app_status_unreachable", 
+            f"Application /status endpoint unreachable: {e}"
+        ))
+        metrics = [
+            Metric("app_status_health", "FAIL", ctx.now),
+            Metric("app_status_http_code", 0, ctx.now),
+        ]
+    except Exception as e:
+        alerts.append(Alert(
+            "app_status_check_error", 
+            f"Error checking application status: {e}"
+        ))
+        metrics = [
+            Metric("app_status_health", "FAIL", ctx.now),
+            Metric("app_status_http_code", 0, ctx.now),
+        ]
+    
+    return metrics, alerts
+
+
 def check_logs(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
     alerts: List[Alert] = []
     for log_cfg in ctx.config.log_checks:
@@ -376,6 +466,7 @@ ALL_CHECKS = [
     check_database_container,
     check_database_port,
     check_database_query,
+    check_app_status,
     check_reboot,
     check_disk_iops,
     check_disk_usage,
