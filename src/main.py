@@ -187,7 +187,7 @@ def status():
             "app_name": "Spondex",
             "version": version,
             "uptime": uptime_seconds,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M'),
             "health_checks": health_checks,
             "system": system_info
         }
@@ -199,7 +199,7 @@ def status():
             "status": "unhealthy",
             "app_name": "Spondex", 
             "error": str(e),
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M')
         }), 500
 
 

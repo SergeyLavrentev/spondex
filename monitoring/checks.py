@@ -339,7 +339,7 @@ def check_reboot(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
             if last_boot.tzinfo is None:
                 last_boot = last_boot.replace(tzinfo=UTC)
             if boot_time > last_boot + timedelta(seconds=5):
-                alerts.append(Alert("server_reboot", f"Server reboot detected at {boot_time.isoformat()}"))
+                alerts.append(Alert("server_reboot", f"Server reboot detected at {boot_time.strftime('%Y-%m-%d %H:%M')}"))
         except ValueError:
             pass
     ctx.store.set_state("last_boot_timestamp", boot_time.astimezone(UTC).isoformat())
