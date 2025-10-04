@@ -114,8 +114,7 @@
   environment:
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
-  register: monitor_uv_sync
-  changed_when: "('installed' in (monitor_uv_sync.stdout | lower)) or ('removed' in (monitor_uv_sync.stdout | lower)) or ('installed' in (monitor_uv_sync.stderr | lower)) or ('removed' in (monitor_uv_sync.stderr | lower))"
+  changed_when: false
 
 - name: Remove exported requirements file
   ansible.builtin.file:
