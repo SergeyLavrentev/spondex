@@ -64,6 +64,7 @@
   ansible.builtin.command:
     cmd: "{{ monitor_uv_binary }} self update {{ monitor_uv_version }}"
   when: (monitor_uv_version | length > 0) and (monitor_uv_check.rc != 0 or monitor_uv_version not in monitor_uv_check.stdout)
+  changed_when: false
   environment:
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
 
