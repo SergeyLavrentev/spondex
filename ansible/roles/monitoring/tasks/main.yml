@@ -93,6 +93,11 @@
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
   register: monitor_uv_export
 
+- name: Check if virtualenv exists
+  ansible.builtin.stat:
+    path: "{{ monitor_virtualenv_dir }}/bin/python"
+  register: monitor_venv_stat
+
 - name: Provision monitoring virtualenv via uv
   ansible.builtin.command:
     cmd: uv venv --clear --python {{ monitor_python_version }} {{ monitor_virtualenv_dir }}
@@ -100,8 +105,7 @@
   environment:
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
-  register: monitor_venv_create
-  changed_when: monitor_venv_create.rc == 0
+  when: not monitor_venv_stat.stat.exists
 
 - name: Sync monitoring dependencies with uv
   ansible.builtin.command:
@@ -110,7 +114,7 @@
   environment:
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
-  when: monitor_uv_export.changed or monitor_venv_create.changed
+  when: monitor_uv_export.changed
 
 - name: Remove exported requirements file
   ansible.builtin.file:
