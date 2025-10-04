@@ -4,14 +4,20 @@
   gather_facts: false
   become: true
   tasks:
-    - name: Ensure /tmp has correct permissions
+    - name: Debug /tmp permissions
+      ansible.builtin.command: ls -la /tmp
+      register: tmp_ls
+    - name: Show /tmp permissions
+      ansible.builtin.debug:
+        msg: "{{ tmp_ls.stdout }}"
+    - name: Ensure /var/tmp has correct permissions
       ansible.builtin.file:
-        path: /tmp
+        path: /var/tmp
         state: directory
         mode: '1777'
     - name: Ensure remote tmp directory exists
       ansible.builtin.file:
-        path: /tmp/ansible
+        path: /var/tmp/ansible
         state: directory
         mode: '1777'
     - name: Update apt cache
