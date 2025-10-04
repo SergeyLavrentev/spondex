@@ -26,10 +26,11 @@ provisioner:
     ANSIBLE_CONFIG: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../ansible.cfg"
     ANSIBLE_COLLECTIONS_PATH: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../collections:/usr/share/ansible/collections"
     ANSIBLE_ROLES_PATH: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../"
-  ANSIBLE_REMOTE_TEMP: /var/tmp
+    ANSIBLE_REMOTE_TEMP: /tmp/ansible
   config_options:
     defaults:
       roles_path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../"
+      remote_tmp: /tmp/ansible
   playbooks:
     prepare: prepare.yml
     converge: converge.yml
