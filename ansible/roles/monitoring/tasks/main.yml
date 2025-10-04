@@ -92,16 +92,16 @@
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
   register: monitor_uv_export
-  changed_when: false
 
 - name: Provision monitoring virtualenv via uv
   ansible.builtin.command:
     cmd: uv venv --clear --python {{ monitor_python_version }} {{ monitor_virtualenv_dir }}
     chdir: "{{ app_root }}"
-    creates: "{{ monitor_virtualenv_dir }}/bin/python"
   environment:
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
+  register: monitor_venv_create
+  creates: "{{ monitor_virtualenv_dir }}/bin/python"
 
 - name: Sync monitoring dependencies with uv
   ansible.builtin.command:
@@ -110,8 +110,7 @@
   environment:
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
-  register: monitor_uv_sync
-  changed_when: "('installed' in (monitor_uv_sync.stdout | lower)) or ('removed' in (monitor_uv_sync.stdout | lower)) or ('installed' in (monitor_uv_sync.stderr | lower)) or ('removed' in (monitor_uv_sync.stderr | lower))"
+  when: monitor_uv_export.changed or monitor_venv_create.changed
 
 - name: Remove exported requirements file
   ansible.builtin.file:
