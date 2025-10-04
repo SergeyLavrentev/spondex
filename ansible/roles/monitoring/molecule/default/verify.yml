@@ -4,6 +4,8 @@
   become: true
   vars:
     app_root: /opt/spondex
+    monitor_mail_enabled: false
+    monitor_systemd_enabled: false
   tasks:
     - name: Read current monitoring config
       ansible.builtin.slurp:
