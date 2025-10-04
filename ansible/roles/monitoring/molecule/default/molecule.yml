@@ -7,8 +7,8 @@ driver:
   name: docker
 
 platforms:
-  - name: debian12
-    image: geerlingguy/docker-debian12-ansible:latest
+  - name: debian13
+    image: geerlingguy/docker-debian13-ansible:latest
     pre_build_image: true
     privileged: true
     command: /sbin/init
