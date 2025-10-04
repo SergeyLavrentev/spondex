@@ -10,14 +10,14 @@
     - name: Show /tmp permissions
       ansible.builtin.debug:
         msg: "{{ tmp_ls.stdout }}"
-    - name: Ensure /var/tmp has correct permissions
+    - name: Ensure /tmp has correct permissions
       ansible.builtin.file:
-        path: /var/tmp
+        path: /tmp
         state: directory
         mode: '1777'
     - name: Ensure remote tmp directory exists
       ansible.builtin.file:
-        path: /var/tmp/ansible
+        path: /tmp/ansible
         state: directory
         mode: '1777'
     - name: Update apt cache
