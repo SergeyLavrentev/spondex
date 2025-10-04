@@ -28,7 +28,7 @@ provisioner:
   config_options:
     defaults:
       roles_path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../"
-      remote_tmp: /tmp
+      remote_tmp: /tmp/ansible
   playbooks:
     prepare: prepare.yml
     converge: converge.yml
