@@ -3,6 +3,12 @@
   hosts: all
   become: true
   tasks:
+    - name: Ensure Ansible remote tmp exists
+      ansible.builtin.file:
+        path: /tmp/ansible
+        state: directory
+        mode: "0700"
+
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true
