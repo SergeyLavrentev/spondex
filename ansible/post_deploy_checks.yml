@@ -25,7 +25,7 @@
 
     - name: Parse docker compose services status
       ansible.builtin.set_fact:
-        compose_services: "{{ compose_ps_raw.stdout | from_json }}"
+        compose_services: "{{ compose_ps_raw.stdout_lines | map('from_json') | list }}"
 
     - name: Extract app and postgres service entries
       ansible.builtin.set_fact:
