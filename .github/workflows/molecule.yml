@@ -35,7 +35,7 @@ jobs:
 
       - name: Run Molecule
         env:
-          ANSIBLE_COLLECTIONS_PATHS: "${{ runner.temp }}/ansible_collections:/usr/share/ansible/collections"
+          ANSIBLE_COLLECTIONS_PATH: "${{ runner.temp }}/ansible_collections:/usr/share/ansible/collections"
         run: |
           source .venv/bin/activate
           mkdir -p "${{ runner.temp }}/ansible_collections"
