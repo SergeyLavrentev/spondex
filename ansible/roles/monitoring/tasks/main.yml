@@ -101,7 +101,7 @@
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
   register: monitor_venv_create
-  creates: "{{ monitor_virtualenv_dir }}/bin/python"
+  changed_when: monitor_venv_create.rc == 0
 
 - name: Sync monitoring dependencies with uv
   ansible.builtin.command:
