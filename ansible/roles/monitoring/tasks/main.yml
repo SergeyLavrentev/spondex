@@ -43,7 +43,6 @@
 
 - name: Install uv CLI if missing
   ansible.builtin.shell: |
-    set -euo pipefail
     curl -LsSf https://astral.sh/uv/install.sh | sh
   args:
     creates: "{{ monitor_uv_binary }}"
