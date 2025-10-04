@@ -33,7 +33,7 @@
     name: exim4
     enabled: true
     state: started
-  when: monitor_mail_enabled | bool
+  when: monitor_mail_enabled | bool and (monitor_systemd_enabled | default(true)) | bool
 
 - name: Ensure uv install directory exists
   ansible.builtin.file:
@@ -157,3 +157,4 @@
     name: spondex-monitor.timer
     enabled: true
     state: started
+  when: (monitor_systemd_enabled | default(true)) | bool

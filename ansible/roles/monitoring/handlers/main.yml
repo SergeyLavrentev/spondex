@@ -1,14 +1,17 @@
 - name: Reload systemd daemon for monitoring units
   ansible.builtin.systemd:
     daemon_reload: true
+  when: (monitor_systemd_enabled | default(true)) | bool
 
 - name: Regenerate exim4 configuration
   ansible.builtin.command:
     cmd: update-exim4.conf
   listen: Regenerate exim4 configuration
+  when: monitor_mail_enabled | bool and (monitor_systemd_enabled | default(true)) | bool
 
 - name: Restart exim4 service
   ansible.builtin.systemd:
     name: exim4
     state: restarted
   listen: Regenerate exim4 configuration
+  when: monitor_mail_enabled | bool and (monitor_systemd_enabled | default(true)) | bool
