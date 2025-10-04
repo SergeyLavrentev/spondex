@@ -27,6 +27,8 @@
     - name: Re-run role without overwrite flag (should preserve manual config)
       ansible.builtin.include_role:
         name: monitoring
+      vars:
+        monitor_systemd_enabled: false
 
     - name: Capture config after preservation run
       ansible.builtin.slurp:
@@ -45,6 +47,7 @@
         name: monitoring
       vars:
         monitor_overwrite_config: true
+        monitor_systemd_enabled: false
 
     - name: Capture config after overwrite run
       ansible.builtin.slurp:
