@@ -4,6 +4,11 @@
   gather_facts: false
   become: true
   tasks:
+    - name: Ensure /tmp has correct permissions
+      ansible.builtin.file:
+        path: /tmp
+        state: directory
+        mode: '1777'
     - name: Ensure remote tmp directory exists
       ansible.builtin.file:
         path: /tmp/ansible
