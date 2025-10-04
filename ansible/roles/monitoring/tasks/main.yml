@@ -106,7 +106,7 @@
 
 - name: Set export changed flag
   ansible.builtin.set_fact:
-    monitor_export_changed: "{{ monitor_req_stat_before.stat.checksum != monitor_req_stat_after.stat.checksum }}"
+    monitor_export_changed: "{{ (monitor_req_stat_before.stat.exists | default(false)) and (monitor_req_stat_after.stat.exists | default(false)) and (monitor_req_stat_before.stat.checksum != monitor_req_stat_after.stat.checksum) }}"
 
 - name: Check if virtualenv exists
   ansible.builtin.stat:
