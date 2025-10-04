@@ -9,6 +9,7 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple
 
+import psutil
 import spotipy
 from dotenv import load_dotenv
 from flask import Flask, jsonify
@@ -119,18 +120,76 @@ app = Flask(__name__)
 def status():
     """Health check and metrics endpoint for monitoring."""
     try:
-        # Basic health check
-        health_data = {
+        # Get version from pyproject.toml
+        version = "1.0.0"  # Default fallback
+        try:
+            import tomllib
+            pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+            if pyproject_path.exists():
+                with open(pyproject_path, "rb") as f:
+                    data = tomllib.load(f)
+                    version = data.get("project", {}).get("version", "1.0.0")
+        except ImportError:
+            # tomllib is Python 3.11+, fallback to toml if available
+            try:
+                import toml
+                pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+                if pyproject_path.exists():
+                    data = toml.load(pyproject_path)
+                    version = data.get("tool", {}).get("poetry", {}).get("version", "1.0.0")
+            except ImportError:
+                pass
+
+        # Basic health data
+        uptime_seconds = int(time.time() - getattr(app, '_start_time', time.time()))
+        
+        # Health checks
+        health_checks = {}
+        
+        # App status check (self-check)
+        health_checks["app_status"] = {
             "status": "healthy",
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "service": "spondex",
-            "version": "1.0.0"
+            "details": {"uptime_seconds": uptime_seconds}
         }
         
-        # Add some basic metrics if available
-        # This is a simple implementation - in production you might want more detailed metrics
-        health_data["metrics"] = {
-            "uptime_seconds": int(time.time() - getattr(app, '_start_time', time.time())),
+        # Database check (simple connectivity)
+        try:
+            from database_manager import DatabaseManager
+            db_manager = DatabaseManager()
+            # Simple query to check DB
+            db_manager.session.execute("SELECT 1")
+            health_checks["database"] = {
+                "status": "healthy",
+                "details": {"connection": "ok"}
+            }
+        except Exception as e:
+            health_checks["database"] = {
+                "status": "unhealthy", 
+                "details": {"error": str(e)}
+            }
+        
+        # System metrics
+        system_info = {
+            "cpu_percent": psutil.cpu_percent(interval=1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_free_gb": round(psutil.disk_usage('/').free / (1024**3), 1)
+        }
+        
+        # Overall status
+        overall_status = "healthy"
+        for check in health_checks.values():
+            if check["status"] == "unhealthy":
+                overall_status = "unhealthy"
+                break
+        
+        health_data = {
+            "status": overall_status,
+            "app_name": "Spondex",
+            "version": version,
+            "uptime": uptime_seconds,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "health_checks": health_checks,
+            "system": system_info
         }
         
         return jsonify(health_data), 200
@@ -138,6 +197,7 @@ def status():
         logger.error(f"Error in /status endpoint: {e}")
         return jsonify({
             "status": "unhealthy",
+            "app_name": "Spondex", 
             "error": str(e),
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
         }), 500

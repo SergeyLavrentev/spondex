@@ -3,6 +3,7 @@ monitor_state_path: /var/lib/spondex-monitor/state.db
 monitor_retention_days: 365
 monitor_load_window_minutes: 60
 monitor_memory_threshold: 0.95
+monitor_service_name: "{{ ansible_hostname | default('Spondex') }}"
 monitor_docker_service: docker
 monitor_required_packages:
   - sysstat
@@ -55,8 +56,7 @@ monitor_mail_from: spondex-monitor@localhost
 monitor_mail_subject: "[Spondex Monitor]"
 monitor_mail_cc: []
 monitor_telegram_enabled: true
-monitor_telegram_chat_ids:
-  - "8365606127"
+monitor_telegram_chat_ids: []
 monitor_telegram_bot_token_env: TG_BOT_TOKEN
 monitor_telegram_api_base: https://api.telegram.org
 monitor_telegram_request_timeout: 10

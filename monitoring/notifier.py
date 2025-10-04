@@ -117,7 +117,7 @@ def _build_welcome_message(config: Config) -> str:
         bullet_lines.append(f"• ошибками в логах: {logs}")
 
     lines = [
-        "Привет! Это бот мониторинга Spondex.",
+        f"Привет! Это бот мониторинга {config.service_name}.",
         "Я слежу за продовой инфраструктурой и присылаю алерты, если что-то идёт не так.",
         "",
         "Слежу за:",

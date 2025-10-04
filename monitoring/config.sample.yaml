@@ -7,6 +7,7 @@
 state_path: /tmp/spondex-monitor/state.db
 retention_days: 365
 cpu_cores: null  # autodetect when null
+service_name: Spondex
 
 # --- Thresholds ------------------------------------------------------------
 load_window_minutes: 60
@@ -41,8 +42,7 @@ disk_devices:
 notification:
   telegram:
     enabled: true
-    chat_ids:
-      - "8365606127"
+    chat_ids: []
     bot_token_env: TG_BOT_TOKEN
     subscriber_store: /tmp/spondex-monitor/telegram_subscribers.json
     poll_updates: true

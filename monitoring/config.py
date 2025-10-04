@@ -89,6 +89,7 @@ class Config:
     load_window_minutes: int = 60
     memory_critical_threshold: float = 0.95  # 95% used
     docker_service_name: str = "docker"
+    service_name: str = "Spondex"
     app_checks: List[DockerCheck] = field(default_factory=lambda: [DockerCheck("spondex-app-1", "app")])
     db_check: DatabaseCheck = field(default_factory=lambda: DatabaseCheck(container_name="spondex-postgres-1"))
     log_checks: List[LogCheck] = field(default_factory=list)
@@ -208,6 +209,7 @@ def load_config(path: Optional[Path] = None) -> Config:
         load_window_minutes=int(data.get("load_window_minutes", 60)),
         memory_critical_threshold=float(data.get("memory_threshold", 0.95)),
         docker_service_name=data.get("docker_service", "docker"),
+        service_name=data.get("service_name", "Spondex"),
         app_checks=_coerce_docker_checks(data.get("app_checks", [])) or [DockerCheck("spondex-app-1", "app")],
         db_check=DatabaseCheck(**data.get("db_check", {"container_name": "spondex-postgres-1"})),
         log_checks=_coerce_log_checks(data.get("log_checks", [])),
