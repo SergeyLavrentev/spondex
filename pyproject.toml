@@ -17,6 +17,7 @@ dependencies = [
 "idna==3.8",
 "load-dotenv==0.1.0",
 "multidict==6.1.0",
+"psutil==6.0.0",
 "PySocks==1.7.1",
 "python-dotenv==1.0.1",
 "redis==5.0.8",
@@ -38,4 +39,5 @@ dev = [
 [tool.uv]
 dev-dependencies = [
     "pytest>=8.4.2",
+    "psutil==6.0.0",
 ]
