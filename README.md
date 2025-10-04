@@ -17,11 +17,13 @@
 ## Требования
 
 - Python 3.13.0+
-- [uv](https://github.com/astral-sh/uv)
+- [uv](https://github.com/astral-sh/uv) 0.4.10+
+- Ansible 12.0.0+ (ansible-core 2.19.2+)
 - Аккаунты Yandex Music и Spotify
 - Токен Yandex Music
 - Зарегистрированное приложение Spotify
 - Docker и Docker Compose
+- Для тестирования: Debian 11 (используется в Molecule контейнерах)
 
 ## CI/CD и автоматизация
 
@@ -37,10 +39,16 @@
 
 ### Molecule-сценарии
 
-Для роли `monitoring` доступны два сценария:
+Для роли `monitoring` доступны два сценария на базе Debian 11:
 
 - `molecule/default` — проверяет сценарий с включённой почтовой нотификацией.
 - `molecule/minimal` — тестирует минимальную установку без Exim4, чтобы убедиться, что лишние пакеты не подтягиваются.
+
+**Особенности тестирования:**
+- Используется образ `geerlingguy/docker-debian11-ansible:latest` для совместимости с GitHub Actions
+- Systemd сервисы отключены в тестах (`monitor_systemd_enabled: false`) для предотвращения ошибок в контейнерах
+- Временные директории Ansible настроены на `/tmp/ansible` с правами 1777
+- Shell команды адаптированы для dash (без bash-специфичных опций)
 
 Запуск локально:
 
