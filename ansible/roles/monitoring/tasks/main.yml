@@ -84,6 +84,11 @@
     that: monitor_uv_lock.stat.exists
     fail_msg: "uv.lock is missing at {{ monitor_uv_requirements }}; sync the repository before deploying monitoring dependencies."
 
+- name: Check requirements file before export
+  ansible.builtin.stat:
+    path: "{{ app_root }}/requirements-monitor.txt"
+  register: monitor_req_stat_before
+
 - name: Export runtime requirements with uv
   ansible.builtin.command:
     cmd: uv export --frozen --no-dev --output-file {{ app_root }}/requirements-monitor.txt
@@ -92,6 +97,16 @@
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
   register: monitor_uv_export
+  changed_when: monitor_uv_export.rc == 0
+
+- name: Check requirements file after export
+  ansible.builtin.stat:
+    path: "{{ app_root }}/requirements-monitor.txt"
+  register: monitor_req_stat_after
+
+- name: Set export changed flag
+  ansible.builtin.set_fact:
+    monitor_export_changed: "{{ monitor_req_stat_before.stat.checksum != monitor_req_stat_after.stat.checksum }}"
 
 - name: Check if virtualenv exists
   ansible.builtin.stat:
@@ -114,7 +129,7 @@
   environment:
     UV_LINK_MODE: copy
     PATH: "{{ monitor_uv_install_dir }}:{{ ansible_env.PATH }}"
-  when: monitor_uv_export.changed
+  when: monitor_export_changed
 
 - name: Remove exported requirements file
   ansible.builtin.file:
