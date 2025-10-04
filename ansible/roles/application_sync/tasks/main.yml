@@ -1,0 +1,127 @@
+---
+- name: Initialize secret variable
+  ansible.builtin.set_fact:
+    app_tokens_content: "{{ app_tokens_content | default('') }}"
+
+- name: Initialize Spotify cache content variable
+  ansible.builtin.set_fact:
+    spotify_cache_content: "{{ spotify_cache_content | default('') }}"
+
+- name: Check local tokens file presence
+  ansible.builtin.stat:
+    path: "{{ local_app_tokens_path }}"
+  delegate_to: localhost
+  become: false
+  register: local_tokens_stat
+  run_once: true
+
+- name: Load local tokens fallback when available
+  ansible.builtin.set_fact:
+    app_tokens_content: "{{ lookup('file', local_app_tokens_path) }}"
+  when:
+    - not is_ci_environment
+    - (app_tokens_content | length) == 0
+    - local_tokens_stat.stat.exists
+
+- name: Check local Spotify cache presence
+  ansible.builtin.stat:
+    path: "{{ local_spotify_cache_path }}"
+  delegate_to: localhost
+  become: false
+  register: local_cache_stat
+  run_once: true
+
+- name: Remember Spotify cache availability
+  ansible.builtin.set_fact:
+    spotify_cache_available: "{{ (local_cache_stat.stat.exists | default(false)) | bool }}"
+
+- name: Warn when Spotify cache is missing locally
+  ansible.builtin.debug:
+    msg: "Локальный файл Spotify cache не найден. Запуск потребует интерактивной авторизации."
+  when:
+    - not is_ci_environment
+    - not local_cache_stat.stat.exists
+
+- name: Validate required secrets
+  ansible.builtin.assert:
+    that:
+      - app_tokens_content | length > 0
+    fail_msg: "Переменная app_tokens_content должна быть передана (секрет с токенами)."
+
+- name: Ensure application directory exists
+  ansible.builtin.file:
+    path: "{{ app_root }}"
+    state: directory
+    mode: '0755'
+
+- name: Synchronize project sources to server
+  ansible.posix.synchronize:
+    src: "{{ repo_root }}/"
+    dest: "{{ app_root }}"
+    delete: true
+    archive: true
+    checksum: true
+    recursive: true
+    rsync_path: "sudo rsync"
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=.github"
+      - "--exclude=ansible"
+      - "--exclude=.venv"
+      - "--exclude=.pytest_cache"
+      - "--exclude=.cache"
+      - "--exclude=*.pyc"
+      - "--exclude=.env"
+  delegate_to: localhost
+  become: false
+
+- name: Render runtime environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ app_root }}/.env"
+    mode: '0600'
+    force: true
+  no_log: true
+
+- name: Validate runtime environment file
+  ansible.builtin.stat:
+    path: "{{ app_root }}/.env"
+  register: runtime_env_stat
+
+- name: Assert runtime environment file created
+  ansible.builtin.assert:
+    that:
+      - runtime_env_stat.stat.exists | default(false)
+      - (runtime_env_stat.stat.size | default(0)) > 0
+    fail_msg: "Runtime environment file was not created on the target host."
+
+- name: Ensure Spotify cache file absent when not provided
+  when:
+    - (spotify_cache_available | default(false)) | bool == false
+    - (spotify_cache_content | length) == 0
+  ansible.builtin.file:
+    path: "{{ app_root }}/.cache"
+    state: absent
+
+- name: Copy Spotify cache file from local repository
+  when:
+    - not is_ci_environment
+    - (spotify_cache_available | default(false)) | bool
+  ansible.builtin.copy:
+    src: "{{ local_spotify_cache_path }}"
+    dest: "{{ app_root }}/.cache"
+    mode: '0600'
+
+- name: Write Spotify cache file from provided content
+  when:
+    - is_ci_environment
+    - (spotify_cache_content | length) > 0
+  ansible.builtin.copy:
+    content: "{{ spotify_cache_content }}"
+    dest: "{{ app_root }}/.cache"
+    mode: '0600'
+
+- name: Check Spotify cache file on server
+  ansible.builtin.stat:
+    path: "{{ app_root }}/.cache"
+  register: server_cache_stat

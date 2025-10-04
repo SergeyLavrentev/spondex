@@ -23,6 +23,33 @@
 - Зарегистрированное приложение Spotify
 - Docker и Docker Compose
 
+## CI/CD и автоматизация
+
+- Основной продакшен-конвейер описан в `/.github/workflows/main-ci-cd.yml` и собирается из переиспользуемых стадий:
+   - `lint.yml` — линтеры Python и Ansible.
+   - `tests.yml` — модульные тесты и pytest-сценарии.
+   - `molecule.yml` — инфраструктурные проверки роли `monitoring`.
+   - `docker-image.yml` — сборка образа (с опциональной публикацией в GHCR).
+   - `deploy.yml` — выкатка на продакшен через Ansible.
+   - `post-deploy.yml` — smoke-проверки после выката.
+- Все стадии можно запускать вручную через `workflow_dispatch` или переиспользовать в других пайплайнах при помощи `workflow_call`.
+- Плейбук `ansible/deploy.yml` разбит на роли (`python_bootstrap`, `system_bootstrap`, `application_sync`, `container_deploy`, `database_setup`, `post_runtime`, `monitoring`). Это позволяет безопасно поднимать «чистый» Debian-хост без предварительной подготовки.
+
+### Molecule-сценарии
+
+Для роли `monitoring` доступны два сценария:
+
+- `molecule/default` — проверяет сценарий с включённой почтовой нотификацией.
+- `molecule/minimal` — тестирует минимальную установку без Exim4, чтобы убедиться, что лишние пакеты не подтягиваются.
+
+Запуск локально:
+
+```bash
+cd ansible/roles/monitoring
+uv run --frozen --python 3.13 molecule test           # полный прогон всех сценариев
+uv run --frozen --python 3.13 molecule test -s minimal # только минимальный сценарий
+```
+
 
 
 ## Установка

@@ -1,0 +1,38 @@
+name: Main Production Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  pytest:
+    needs: lint
+    uses: ./.github/workflows/tests.yml
+
+  molecule:
+    needs: pytest
+    uses: ./.github/workflows/molecule.yml
+
+  docker_image:
+    needs:
+      - pytest
+      - molecule
+    uses: ./.github/workflows/docker-image.yml
+    with:
+      push_images: true
+    secrets: inherit
+
+  deploy:
+    needs: docker_image
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+
+  post_deploy:
+    needs: deploy
+    uses: ./.github/workflows/post-deploy.yml
+    secrets: inherit

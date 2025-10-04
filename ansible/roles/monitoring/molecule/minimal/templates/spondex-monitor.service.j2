@@ -1,0 +1,15 @@
+[Unit]
+Description=Spondex monitoring job
+{% set docker_unit = monitor_docker_service if monitor_docker_service.endswith('.service') else monitor_docker_service ~ '.service' %}
+Requires={{ docker_unit }}
+After={{ docker_unit }}
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ app_root }}
+EnvironmentFile={{ app_root }}/.env
+ExecStart={{ monitor_virtualenv_dir }}/bin/python -m monitoring.monitor --config {{ app_root }}/monitoring/config.yaml --print
+ExecStartPost={{ monitor_virtualenv_dir }}/bin/python -m monitoring.monitor --config {{ app_root }}/monitoring/config.yaml --poll-telegram-updates
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

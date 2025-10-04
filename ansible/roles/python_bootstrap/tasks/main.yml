@@ -1,0 +1,90 @@
+---
+- name: Ensure Python 3 is available
+  ansible.builtin.raw: test -x /usr/bin/python3 || (apt-get update -y && apt-get install -y python3)
+  changed_when: false
+
+- name: Gather facts
+  ansible.builtin.setup:
+
+- name: Check if Python {{ python_major_minor }} is already installed
+  ansible.builtin.stat:
+    path: "{{ python_binary_path }}"
+  register: python_target_stat
+  changed_when: false
+
+- name: Determine distribution codename for Python provisioning
+  ansible.builtin.set_fact:
+    python_distribution_codename: >-
+      {{ ansible_facts.get('lsb', {}).get('codename')
+         | default(ansible_facts.get('distribution_release'))
+         | default('') }}
+
+- name: Evaluate backports support for Python {{ python_major_minor }}
+  ansible.builtin.set_fact:
+    python_backports_supported: >-
+      {{ ansible_facts['os_family'] == 'Debian'
+         and python_distribution_codename | length > 0
+         and (python_distribution_codename not in ['trixie', 'testing', 'unstable', 'sid']) }}
+
+- name: Enable Debian backports repository for Python {{ python_major_minor }}
+  ansible.builtin.deb822_repository:
+    name: debian-backports
+    types: [deb]
+    uris: http://deb.debian.org/debian
+    suites: "{{ python_distribution_codename }}-backports"
+    components: [main]
+    state: present
+  when:
+    - python_backports_supported | default(false)
+
+- name: Ensure deadsnakes PPA is present on Ubuntu
+  ansible.builtin.apt_repository:
+    repo: ppa:deadsnakes/ppa
+    state: present
+  when:
+    - ansible_facts['distribution'] == 'Ubuntu'
+
+- name: Set default apt release for Python {{ python_major_minor }}
+  ansible.builtin.set_fact:
+    python_apt_default_release: "{{ python_distribution_codename }}-backports"
+  when:
+    - python_backports_supported | default(false)
+
+- name: Install Python {{ python_major_minor }} packages
+  ansible.builtin.apt:
+    name: "{{ python_apt_packages }}"
+    state: present
+    update_cache: true
+    default_release: "{{ python_apt_default_release | default(omit) }}"
+
+- name: Refresh Python {{ python_major_minor }} binary status
+  ansible.builtin.stat:
+    path: "{{ python_binary_path }}"
+  register: python_target_stat
+  changed_when: false
+
+- name: Configure python3 alternative for Python {{ python_major_minor }}
+  community.general.alternatives:
+    name: python3
+    link: /usr/bin/python3
+    path: "{{ python_binary_path }}"
+    priority: "{{ python_alternatives_priority }}"
+    state: present
+  when: python_target_stat.stat.exists
+
+- name: Configure python alternative for Python {{ python_major_minor }}
+  community.general.alternatives:
+    name: python
+    link: /usr/bin/python
+    path: "{{ python_binary_path }}"
+    priority: "{{ python_alternatives_priority }}"
+    state: present
+  when: python_target_stat.stat.exists
+
+- name: Reset connection to use Python {{ python_major_minor }}
+  ansible.builtin.meta: reset_connection
+  when: python_target_stat.stat.exists
+
+- name: Gather facts after Python {{ python_major_minor }} installation
+  ansible.builtin.setup:
+  when: python_target_stat.stat.exists

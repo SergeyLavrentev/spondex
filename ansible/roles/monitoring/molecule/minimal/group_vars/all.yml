@@ -1,0 +1,10 @@
+---
+monitor_mail_enabled: false
+monitor_overwrite_config: false
+monitor_telegram_enabled: false
+monitor_app_containers:
+  - name: spondex-app-1
+    label: app
+monitor_db_container: spondex-postgres-1
+monitor_telegram_bot_token: ""
+monitor_telegram_chat_ids: []

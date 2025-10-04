@@ -1,0 +1,19 @@
+---
+- name: Smoke | Display target host
+  ansible.builtin.debug:
+    msg: "Smoke deploy check on {{ inventory_hostname }}"
+  tags: ['smoke']
+
+- name: Smoke | Verify privileged command execution
+  ansible.builtin.command:
+    cmd: whoami
+  register: smoke_whoami
+  changed_when: false
+  tags: ['smoke']
+
+- name: Smoke | Assert root privileges available
+  ansible.builtin.assert:
+    that:
+      - smoke_whoami.stdout == 'root'
+    fail_msg: "Smoke test requires ability to execute commands as root."
+  tags: ['smoke']

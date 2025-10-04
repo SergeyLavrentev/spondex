@@ -1,0 +1,51 @@
+name: Lint
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections:~/.ansible/collections:/usr/share/ansible/collections
+      ANSIBLE_CONFIG: ansible/ansible.cfg
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        env:
+          UV_EXTRA: dev
+        run: uv sync --frozen --extra dev
+
+      - name: Run Ruff lint
+        run: uvx ruff@0.6.5 check .
+
+      - name: Install Ansible tooling
+        run: |
+          uv tool install ansible
+          uv tool install ansible-lint
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install --force -r ansible/requirements.yml -p ansible/collections
+
+      - name: Run Ansible lint
+        run: ansible-lint -c ansible/ansible-lint.yml ansible/deploy.yml
+
+      - name: Run Ansible syntax check
+        run: ansible-playbook ansible/deploy.yml --syntax-check

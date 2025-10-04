@@ -1,0 +1,97 @@
+---
+- name: Verify Spondex deployment health
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    app_root: "/opt/spondex"
+    docker_compose_file: "{{ app_root }}/docker-compose.prod.yml"
+    monitor_virtualenv_dir: "{{ app_root }}/.venv-monitor"
+
+  tasks:
+    - name: Collect docker compose status in JSON
+      ansible.builtin.command:
+        cmd: docker compose -f {{ docker_compose_file }} ps --format json
+        chdir: "{{ app_root }}"
+      register: compose_ps_raw
+      changed_when: false
+
+    - name: Ensure docker compose status output is not empty
+      ansible.builtin.assert:
+        that:
+          - compose_ps_raw.stdout | length > 0
+        fail_msg: "docker compose status returned empty output"
+
+    - name: Parse docker compose services status
+      ansible.builtin.set_fact:
+        compose_services: "{{ compose_ps_raw.stdout | from_json }}"
+
+    - name: Extract app and postgres service entries
+      ansible.builtin.set_fact:
+        app_service_entries: "{{ compose_services | selectattr('Service', 'equalto', 'app') | list }}"
+        postgres_service_entries: "{{ compose_services | selectattr('Service', 'equalto', 'postgres') | list }}"
+
+    - name: Assert application container is running
+      ansible.builtin.assert:
+        that:
+          - app_service_entries | length > 0
+          - app_service_entries[0].State == 'running'
+        fail_msg: "Application container is not running: {{ app_service_entries | default([]) }}"
+
+    - name: Assert database container is healthy
+      ansible.builtin.assert:
+        that:
+          - postgres_service_entries | length > 0
+          - postgres_service_entries[0].State == 'running'
+          - ('healthy' in (postgres_service_entries[0].get('Health', '') | lower)) or ('healthy' in (postgres_service_entries[0].get('Status', '') | lower))
+        fail_msg: "Postgres container is not healthy: {{ postgres_service_entries | default([]) }}"
+
+    - name: Check monitoring timer active state
+      ansible.builtin.command:
+        cmd: systemctl is-active spondex-monitor.timer
+      register: monitor_timer_active
+      changed_when: false
+
+    - name: Ensure monitoring timer is active
+      ansible.builtin.assert:
+        that:
+          - monitor_timer_active.stdout | trim == 'active'
+        fail_msg: "Monitoring timer is not active: {{ monitor_timer_active.stdout | default('unknown') }}"
+
+    - name: Check monitoring timer enabled state
+      ansible.builtin.command:
+        cmd: systemctl is-enabled spondex-monitor.timer
+      register: monitor_timer_enabled
+      changed_when: false
+
+    - name: Ensure monitoring timer is enabled
+      ansible.builtin.assert:
+        that:
+          - monitor_timer_enabled.stdout | trim == 'enabled'
+        fail_msg: "Monitoring timer is not enabled: {{ monitor_timer_enabled.stdout | default('unknown') }}"
+
+    - name: Retrieve last monitoring service result
+      ansible.builtin.command:
+        cmd: systemctl show spondex-monitor.service --property=Result --value
+      register: monitor_service_result
+      changed_when: false
+
+    - name: Ensure monitoring service last run succeeded
+      ansible.builtin.assert:
+        that:
+          - monitor_service_result.stdout | trim in ['success', 'exit-code']
+        fail_msg: "Monitoring service last result is not successful: {{ monitor_service_result.stdout | default('unknown') }}"
+
+    - name: Execute monitoring checks in dry-run mode
+      ansible.builtin.command:
+        cmd: "{{ monitor_virtualenv_dir }}/bin/python -m monitoring.monitor --config {{ app_root }}/monitoring/config.yaml --no-email --no-telegram --no-print"
+        chdir: "{{ app_root }}"
+      register: monitoring_dry_run
+      changed_when: false
+
+    - name: Ensure monitoring dry-run completed successfully
+      ansible.builtin.assert:
+        that:
+          - monitoring_dry_run.rc == 0
+        fail_msg: "Monitoring dry-run command failed with rc={{ monitoring_dry_run.rc }}"

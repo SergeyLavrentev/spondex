@@ -1,0 +1,12 @@
+[Unit]
+Description=Spondex monitoring timer
+
+[Timer]
+OnBootSec=2m
+OnUnitActiveSec={{ monitor_timer_interval }}
+AccuracySec=1m
+Persistent=true
+Unit=spondex-monitor.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,25 @@
+---
+- name: Copy Spotify cache into application container
+  when:
+    - (server_cache_stat.stat.exists | default(false)) | bool
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.prod.yml cp ./.cache app:/app/.cache
+    chdir: "{{ app_root }}"
+
+- name: Restart application container to apply Spotify cache
+  when:
+    - (server_cache_stat.stat.exists | default(false)) | bool
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.prod.yml restart app
+    chdir: "{{ app_root }}"
+
+- name: Show running containers
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.prod.yml ps
+    chdir: "{{ app_root }}"
+  register: compose_ps
+  changed_when: false
+
+- name: Display running containers
+  ansible.builtin.debug:
+    var: compose_ps.stdout_lines

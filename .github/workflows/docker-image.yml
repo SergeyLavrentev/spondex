@@ -1,17 +1,32 @@
-name: Build and Publish Docker Image
+name: Build Docker Image
 
 on:
-  push:
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      push_images:
+        description: 'Push built images to GHCR'
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      push_images:
+        description: 'Push built images to GHCR'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose.prod.yml'
+      - '.github/workflows/docker-image.yml'
+      - 'pyproject.toml'
+      - 'uv.lock'
 
 permissions:
   contents: read
   packages: write
 
 jobs:
-  build-and-push:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,31 +36,28 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Add uv to PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Lint sources
+      - name: Run Ruff lint
         run: uvx ruff@0.6.5 check .
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
+        if: inputs.push_images
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -55,10 +67,10 @@ jobs:
             type=ref,event=branch
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and push
+      - name: Build and optionally push image
         uses: docker/build-push-action@v6
         with:
-          push: true
+          push: ${{ inputs.push_images }}
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
