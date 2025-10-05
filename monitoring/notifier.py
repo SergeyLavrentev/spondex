@@ -319,7 +319,8 @@ def send_alert_telegram(config: Config, alerts: list[Alert], body: str, *, force
 
     chat_id_candidates = _unique(list(tg_cfg.chat_ids) + subscriber_chat_ids)
     if not chat_id_candidates:
-        raise RuntimeError("Telegram chat_ids list is empty")
+        # No subscribers - not an error, just nothing to send
+        return False
 
     for chat_id in chat_id_candidates:
         _send_telegram_message(
@@ -357,7 +358,9 @@ def send_notifications(config: Config, alerts: list[Alert], body: str, *, force:
     errors: List[str] = []
 
     try:
-        send_alert_telegram(config, alerts, body, force=force)
+        if not send_alert_telegram(config, alerts, body, force=force):
+            # No subscribers configured - not an error
+            pass
     except RuntimeError as exc:
         errors.append(f"telegram: {exc}")
 
