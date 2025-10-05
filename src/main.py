@@ -1439,15 +1439,26 @@ class MusicSynchronizer:
                 continue
 
             tracks_attr = getattr(yandex_playlist, "tracks", []) or []
-            existing_ids = set()
+            existing_tracks = set()
             for track_obj in tracks_attr:
-                track_id = getattr(track_obj, "track_id", None)
-                if track_id:
-                    existing_ids.add(str(track_id))
+                track_detail = getattr(track_obj, "track", None)
+                if track_detail:
+                    title = getattr(track_detail, "title", None)
+                    artists = getattr(track_detail, "artists", [])
+                    if artists:
+                        artist_name = getattr(artists[0], "name", None)
+                        if title and artist_name:
+                            existing_tracks.add((title.lower().strip(), artist_name.lower().strip()))
 
             additions = 0
             for item in playlist.tracks:
                 if not item.track_id:
+                    continue
+
+                # Check if track already exists by title/artist
+                item_title = (item.title or "").lower().strip()
+                item_artist = (item.artist or "").lower().strip()
+                if (item_title, item_artist) in existing_tracks:
                     continue
 
                 resolved = self.yandex.resolve_track_for_playlist(
@@ -1465,10 +1476,6 @@ class MusicSynchronizer:
                     continue
 
                 track_part, album_part, composite = resolved
-                compare_id = composite or f"{track_part}:{album_part}"
-                if compare_id in existing_ids:
-                    continue
-
                 try:
                     updated_playlist = self.yandex.insert_track_into_playlist(
                         yandex_playlist,
@@ -1489,8 +1496,9 @@ class MusicSynchronizer:
                 if updated_playlist:
                     yandex_playlist = updated_playlist
 
-                # Update existing_ids with the new track
-                existing_ids.add(compare_id)
+                # Update existing_tracks with the new track
+                if item_title and item_artist:
+                    existing_tracks.add((item_title, item_artist))
                 additions += 1
 
             if additions:
