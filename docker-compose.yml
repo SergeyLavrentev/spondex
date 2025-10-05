@@ -9,6 +9,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      - TZ=Europe/Moscow
       # Чувствительные токены подставляются Ansible-скриптом из GitHub Secret `APP_TOKENS` (см. tokens.env.example)
       - SPOTIPY_CLIENT_ID=${SPOTIPY_CLIENT_ID}
       - SPOTIPY_CLIENT_SECRET=${SPOTIPY_CLIENT_SECRET}

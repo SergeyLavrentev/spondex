@@ -95,7 +95,7 @@ def main() -> int:
             print("Telegram polling disabled in config; nothing to do.")
         return 0
 
-    now = datetime.now(UTC)
+    now = datetime.now().astimezone()
     store = StateStore(config.state_path)
     ctx = CheckContext(config=config, store=store, now=now)
 

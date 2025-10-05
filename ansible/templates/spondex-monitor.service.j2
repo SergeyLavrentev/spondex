@@ -8,6 +8,7 @@ After={{ docker_unit }}
 Type=oneshot
 WorkingDirectory={{ app_root }}
 EnvironmentFile={{ app_root }}/.env
+Environment=TZ=Europe/Moscow
 ExecStart={{ monitor_virtualenv_dir }}/bin/python -m monitoring.monitor --config {{ app_root }}/monitoring/config.yaml --print
 ExecStartPost={{ monitor_virtualenv_dir }}/bin/python -m monitoring.monitor --config {{ app_root }}/monitoring/config.yaml --poll-telegram-updates
 Nice=10
