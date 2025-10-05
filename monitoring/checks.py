@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import requests
 
@@ -475,7 +475,6 @@ def check_yandex_api_availability(ctx: CheckContext) -> tuple[List[Metric], List
     try:
         # Try to import Yandex Music client
         from yandex_music import Client as YandexClient
-        from yandex_music.exceptions import YandexMusicError
         
         # Get token from environment
         token = os.environ.get("YANDEX_TOKEN")
