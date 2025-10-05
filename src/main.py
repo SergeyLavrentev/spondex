@@ -155,9 +155,19 @@ def status():
         # Database check (simple connectivity)
         try:
             from database_manager import DatabaseManager
-            db_manager = DatabaseManager()
+            
+            # Параметры подключения к PostgreSQL (как в основном коде)
+            db_params = {
+                "dbname": os.getenv("POSTGRES_DB", "music_sync"),
+                "user": os.getenv("POSTGRES_USER"),
+                "password": os.getenv("POSTGRES_PASSWORD"),
+                "host": os.getenv("POSTGRES_HOST", "localhost"),
+                "port": os.getenv("POSTGRES_PORT", "5432")
+            }
+            
+            db_manager = DatabaseManager(db_params)
             # Simple query to check DB
-            db_manager.session.execute("SELECT 1")
+            db_manager.cursor.execute("SELECT 1")
             health_checks["database"] = {
                 "status": "healthy",
                 "details": {"connection": "ok"}
@@ -187,7 +197,7 @@ def status():
             "app_name": "Spondex",
             "version": version,
             "uptime": uptime_seconds,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M'),
+            "timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M %Z'),
             "health_checks": health_checks,
             "system": system_info
         }
@@ -199,7 +209,7 @@ def status():
             "status": "unhealthy",
             "app_name": "Spondex", 
             "error": str(e),
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M')
+            "timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M %Z')
         }), 500
 
 
@@ -1756,7 +1766,8 @@ def main():
     spotify_service = SpotifyMusic(db_manager)
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
 
-    # Start web server in background thread
+    # Start web server in background thread for Docker environment
+    import threading
     app._start_time = time.time()
     web_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8888, debug=False, use_reloader=False), daemon=True)
     web_thread.start()

@@ -250,8 +250,14 @@ def check_app_status(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
             return metrics, alerts
         
         # Check required fields
-        required_fields = ["status", "timestamp", "service", "version"]
+        required_fields = ["status", "timestamp", "version"]
         missing_fields = [field for field in required_fields if field not in data]
+        
+        # Check for service field (can be 'service' or 'app_name')
+        has_service_field = "service" in data or "app_name" in data
+        if not has_service_field:
+            missing_fields.append("service")
+            
         if missing_fields:
             alerts.append(Alert(
                 "app_status_missing_fields", 

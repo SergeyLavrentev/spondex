@@ -55,7 +55,7 @@ def _format_metric_value(metric: Metric) -> str:
 
 
 def format_report(now: datetime, alerts: List[Alert], metrics: List[Metric]) -> str:
-    lines = [f"Spondex monitoring report at {now.strftime('%Y-%m-%d %H:%M')}", ""]
+    lines = [f"Spondex monitoring report at {now.strftime('%Y-%m-%d %H:%M %Z')}", ""]
     if alerts:
         lines.append("Alerts:")
         for alert in alerts:
@@ -65,7 +65,7 @@ def format_report(now: datetime, alerts: List[Alert], metrics: List[Metric]) -> 
     lines.append("")
     lines.append("Recent metrics:")
     for metric in metrics:
-        lines.append(f"- {metric.name} = {_format_metric_value(metric)} at {metric.recorded_at.strftime('%Y-%m-%d %H:%M')}")
+        lines.append(f"- {metric.name} = {_format_metric_value(metric)}")
     return "\n".join(lines)
 
 

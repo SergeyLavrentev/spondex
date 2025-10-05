@@ -6,6 +6,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./src:/opt/spondex/src
     environment:
       - SPOTIPY_CLIENT_ID=${SPOTIPY_CLIENT_ID}
       - SPOTIPY_CLIENT_SECRET=${SPOTIPY_CLIENT_SECRET}
