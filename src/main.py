@@ -148,7 +148,7 @@ def status():
         # App status check (self-check)
         health_checks["app_status"] = {
             "status": "healthy",
-            "details": {"uptime_seconds": uptime_seconds}
+            "details": {}
         }
         
         # Database check (simple connectivity)
@@ -202,7 +202,7 @@ def status():
             "app_name": "Spondex",
             "version": version,
             "uptime": uptime_formatted,
-            "timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M %Z'),
+            "timestamp": datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z'),
             "health_checks": health_checks,
             "system": system_info
         }
@@ -214,7 +214,7 @@ def status():
             "status": "unhealthy",
             "app_name": "Spondex", 
             "error": str(e),
-            "timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M %Z')
+            "timestamp": datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z')
         }), 500
 
 
