@@ -530,8 +530,17 @@ def check_sync_status(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
         # Import database manager
         from database_manager import DatabaseManager
         
+        # Get database connection parameters from environment
+        db_params = {
+            "dbname": os.environ.get("POSTGRES_DB", "music_sync"),
+            "user": os.environ.get("POSTGRES_USER"),
+            "password": os.environ.get("POSTGRES_PASSWORD"),
+            "host": os.environ.get("POSTGRES_HOST", "localhost"),
+            "port": int(os.environ.get("POSTGRES_PORT", "5432"))
+        }
+        
         # Connect to database
-        db_manager = DatabaseManager()
+        db_manager = DatabaseManager(db_params)
         
         # Check last sync times for both services
         services = ["yandex", "spotify"]
@@ -584,8 +593,17 @@ def check_playlist_counts(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]
         # Import database manager
         from database_manager import DatabaseManager
         
+        # Get database connection parameters from environment
+        db_params = {
+            "dbname": os.environ.get("POSTGRES_DB", "music_sync"),
+            "user": os.environ.get("POSTGRES_USER"),
+            "password": os.environ.get("POSTGRES_PASSWORD"),
+            "host": os.environ.get("POSTGRES_HOST", "localhost"),
+            "port": int(os.environ.get("POSTGRES_PORT", "5432"))
+        }
+        
         # Connect to database
-        db_manager = DatabaseManager()
+        db_manager = DatabaseManager(db_params)
         
         # Get playlist counts
         services = ["yandex", "spotify"]
