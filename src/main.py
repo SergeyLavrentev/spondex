@@ -5,7 +5,6 @@ import logging
 import os
 import random
 import time
-import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple
 
