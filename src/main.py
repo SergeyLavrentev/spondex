@@ -195,7 +195,7 @@ def status():
         days = uptime_seconds // 86400
         hours = (uptime_seconds % 86400) // 3600
         minutes = (uptime_seconds % 3600) // 60
-        uptime_formatted = "02d"
+        uptime_formatted = f"{days:02d}:{hours:02d}:{minutes:02d}"
         
         health_data = {
             "status": overall_status,
