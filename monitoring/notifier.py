@@ -294,7 +294,7 @@ def _handle_status_command(config: Config, token: str, chat_id: str) -> None:
 
 def _handle_help_command(config: Config, token: str, chat_id: str) -> None:
     """Handle /help command by sending help information to the user."""
-    help_text = """🤖 Spondex Monitoring Bot
+    help_text = """🤖 
 
 Команды:
 /start - Подписаться на уведомления об алертах
