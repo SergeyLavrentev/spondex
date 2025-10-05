@@ -1442,20 +1442,7 @@ class MusicSynchronizer:
             existing_ids = set()
             for track_obj in tracks_attr:
                 track_id = getattr(track_obj, "track_id", None)
-                if not track_id:
-                    continue
-                # Try to get album_id from the track object
-                album_id = None
-                track_detail = getattr(track_obj, "track", None)
-                if track_detail:
-                    albums = getattr(track_detail, "albums", [])
-                    if albums:
-                        album_id = str(getattr(albums[0], "id", ""))
-                if album_id:
-                    composite_id = f"{track_id}:{album_id}"
-                    existing_ids.add(composite_id)
-                else:
-                    # Fallback to just track_id if album_id not available
+                if track_id:
                     existing_ids.add(str(track_id))
 
             additions = 0
@@ -1503,9 +1490,7 @@ class MusicSynchronizer:
                     yandex_playlist = updated_playlist
 
                 # Update existing_ids with the new track
-                if album_part:
-                    new_composite = f"{track_part}:{album_part}"
-                    existing_ids.add(new_composite)
+                existing_ids.add(compare_id)
                 additions += 1
 
             if additions:
