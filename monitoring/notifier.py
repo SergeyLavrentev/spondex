@@ -255,6 +255,9 @@ def _poll_telegram_updates(
         elif text == "/status" and chat_id_str in chat_ids:
             # Handle /status command for subscribed users
             _handle_status_command(config, token, chat_id_str)
+        elif text == "/help" and chat_id_str in chat_ids:
+            # Handle /help command for subscribed users
+            _handle_help_command(config, token, chat_id_str)
 
     return chat_ids, max_update_id, new_chat_ids
 
@@ -283,6 +286,48 @@ def _handle_status_command(config: Config, token: str, chat_id: str) -> None:
     except Exception as e:
         # Send error message if something goes wrong
         error_msg = f"Error getting status: {str(e)}"
+        try:
+            _send_telegram_message(config, token, chat_id, error_msg, timeout=config.notification.telegram.request_timeout)
+        except Exception:
+            pass  # Ignore errors when sending error messages
+
+
+def _handle_help_command(config: Config, token: str, chat_id: str) -> None:
+    """Handle /help command by sending help information to the user."""
+    help_text = """🤖 Spondex Monitoring Bot
+
+Команды:
+/start - Подписаться на уведомления об алертах
+/status - Получить текущий статус системы и метрики
+/help - Показать эту справку
+
+📊 Мониторинг метрик:
+• CPU загрузка (1, 5, 15 минут)
+• Использование памяти и события OOM
+• Перезагрузки сервера
+• Статус docker.service
+• Контейнеры приложения (spondex_app, spondex_postgres)
+• Использование диска
+• Логи приложений
+• Синхронизация Yandex Music (последняя синхронизация, статус API)
+• Плейлисты и избранные треки/альбомы/исполнители
+
+🚨 Алерт уровни:
+• CRITICAL - Критические проблемы требующие немедленного внимания
+• WARNING - Предупреждения о потенциальных проблемах
+• INFO - Информационные сообщения (включая разрешение алертов)
+
+💡 Логика работы:
+• Алерт отправляется только при первом появлении
+• При разрешении алерта приходит уведомление
+• /status показывает текущее состояние всех метрик
+• Мониторинг запускается каждые 5 минут"""
+
+    try:
+        _send_telegram_message(config, token, chat_id, help_text, timeout=config.notification.telegram.request_timeout)
+    except Exception as e:
+        # Send error message if something goes wrong
+        error_msg = f"Error sending help: {str(e)}"
         try:
             _send_telegram_message(config, token, chat_id, error_msg, timeout=config.notification.telegram.request_timeout)
         except Exception:

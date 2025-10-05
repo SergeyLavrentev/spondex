@@ -54,6 +54,16 @@ def _format_metric_value(metric: Metric) -> str:
     return value
 
 
+def format_alerts_only(now: datetime, alerts: List[Alert]) -> str:
+    lines = [f"Spondex alerts at {now.strftime('%Y-%m-%d %H:%M %Z')}", ""]
+    if alerts:
+        for alert in alerts:
+            lines.append(f"[{alert.severity.upper()}] {alert.name}: {alert.message}")
+    else:
+        lines.append("No alerts.")
+    return "\n".join(lines)
+
+
 def format_report(now: datetime, alerts: List[Alert], metrics: List[Metric]) -> str:
     lines = [f"Spondex monitoring report at {now.strftime('%Y-%m-%d %H:%M %Z')}", ""]
     if alerts:
@@ -105,6 +115,17 @@ def main() -> int:
         cutoff = now - timedelta(days=config.retention_days)
         store.prune_metrics_older_than(cutoff)
 
+    # Load previous alerts state
+    prev_alerts_state = store.get_json_state("active_alerts", {})
+    prev_alert_names = set(prev_alerts_state.keys())
+    current_alert_names = {alert.name for alert in alerts}
+    
+    # Determine new and resolved alerts
+    new_alerts = [alert for alert in alerts if alert.name not in prev_alert_names]
+    resolved_alert_names = prev_alert_names - current_alert_names
+    resolved_alerts = [Alert(name=name, message="Alert resolved", severity="info") 
+                      for name in resolved_alert_names]
+
     report = format_report(now, alerts, metrics)
     should_print = True if args.print_report is None else args.print_report
 
@@ -120,12 +141,30 @@ def main() -> int:
             return 2
         print("Test notification sent successfully.")
         return 0
-    elif alerts:
-        errors = send_notifications(config, alerts, report)
-        if errors:  # pragma: no cover - network failure branch
-            for err in errors:
-                print(f"Notification error: {err}", file=sys.stderr)
-            return 2
+    else:
+        # Send notifications for new alerts
+        if new_alerts:
+            alert_message = format_alerts_only(now, new_alerts)
+            errors = send_notifications(config, new_alerts, alert_message)
+            if errors:
+                for err in errors:
+                    print(f"Notification error: {err}", file=sys.stderr)
+                return 2
+        
+        # Send notifications for resolved alerts
+        if resolved_alerts:
+            resolved_message = format_alerts_only(now, resolved_alerts)
+            errors = send_notifications(config, resolved_alerts, resolved_message)
+            if errors:
+                for err in errors:
+                    print(f"Notification error: {err}", file=sys.stderr)
+                return 2
+    
+    # Save current alerts state
+    current_alerts_state = {alert.name: {"message": alert.message, "severity": alert.severity} 
+                           for alert in alerts}
+    store.set_json_state("active_alerts", current_alerts_state)
+    
     return 0
 
 
