@@ -191,11 +191,17 @@ def status():
                 overall_status = "unhealthy"
                 break
         
+        # Format uptime as DD:HH:MM
+        days = uptime_seconds // 86400
+        hours = (uptime_seconds % 86400) // 3600
+        minutes = (uptime_seconds % 3600) // 60
+        uptime_formatted = "02d"
+        
         health_data = {
             "status": overall_status,
             "app_name": "Spondex",
             "version": version,
-            "uptime": uptime_seconds,
+            "uptime": uptime_formatted,
             "timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M %Z'),
             "health_checks": health_checks,
             "system": system_info

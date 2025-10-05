@@ -72,7 +72,7 @@ overridden per environment. Notable options:
   подписчиков и `last_update_id`. По умолчанию лежит рядом со state.db.
 - `notification.telegram.poll_updates`: включает авто-регистрацию — бот раз в
   запуск читает `getUpdates` и добавляет всех, кто написал `/start` в личку.
-- `monitor_timer_interval`: systemd timer cadence (default 5 minutes).
+- `monitor_timer_interval`: systemd timer cadence (default 1 minute).
 - `monitor_overwrite_config`: when `true`, Ansible will re-render
   `/opt/spondex/monitoring/config.yaml`; keep it `false` to preserve manual
   edits on the host.

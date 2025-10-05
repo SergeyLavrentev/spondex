@@ -39,7 +39,7 @@ monitor_telegram_request_timeout: 10
 monitor_telegram_bot_token: ""
 monitor_telegram_auto_register: true
 monitor_telegram_subscriber_store: "{{ monitor_state_path | dirname }}/telegram_subscribers.json"
-monitor_timer_interval: 5m
+monitor_timer_interval: 1m
 monitor_overwrite_config: false
 monitor_uv_version: "0.4.10"
 monitor_uv_install_dir: /usr/local/bin
