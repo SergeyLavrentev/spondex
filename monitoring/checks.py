@@ -6,13 +6,17 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import requests
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from .config import Config
 from .storage import Metric, StateStore
@@ -463,6 +467,180 @@ def check_disk_usage(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
     return metrics, alerts
 
 
+def check_yandex_api_availability(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
+    """Check Yandex Music API availability by attempting to get user info."""
+    alerts: List[Alert] = []
+    metrics: List[Metric] = []
+    
+    try:
+        # Try to import Yandex Music client
+        from yandex_music import Client as YandexClient
+        from yandex_music.exceptions import YandexMusicError
+        
+        # Get token from environment
+        token = os.environ.get("YANDEX_TOKEN")
+        if not token:
+            alerts.append(Alert(
+                "yandex_api_no_token", 
+                "YANDEX_TOKEN environment variable not set"
+            ))
+            metrics.append(Metric("yandex_api_status", STATUS_FAIL, ctx.now))
+            return metrics, alerts
+        
+        # Try to create client and get account info
+        start = time.monotonic()
+        client = YandexClient(token)
+        account = client.account_status()
+        elapsed = time.monotonic() - start
+        latency_ms = int(round(elapsed * 1000))
+        
+        metrics.extend([
+            Metric.from_value("yandex_api_latency_ms", latency_ms, ctx.now),
+            Metric("yandex_api_status", STATUS_OK, ctx.now),
+        ])
+        
+        # Additional metrics from account info
+        if hasattr(account, 'result') and account.result:
+            if hasattr(account.result, 'account') and account.result.account:
+                login = getattr(account.result.account, 'login', None)
+                if login:
+                    metrics.append(Metric("yandex_account_login", login, ctx.now))
+        
+    except ImportError as e:
+        alerts.append(Alert(
+            "yandex_api_import_error", 
+            f"Cannot import Yandex Music client: {e}"
+        ))
+        metrics.append(Metric("yandex_api_status", STATUS_FAIL, ctx.now))
+    except Exception as e:
+        alerts.append(Alert(
+            "yandex_api_unavailable", 
+            f"Yandex Music API unavailable: {e}"
+        ))
+        metrics.append(Metric("yandex_api_status", STATUS_FAIL, ctx.now))
+    
+    return metrics, alerts
+
+
+def check_sync_status(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
+    """Check sync status and age for both services."""
+    alerts: List[Alert] = []
+    metrics: List[Metric] = []
+    
+    try:
+        # Import database manager
+        from database_manager import DatabaseManager
+        
+        # Connect to database
+        db_manager = DatabaseManager()
+        
+        # Check last sync times for both services
+        services = ["yandex", "spotify"]
+        for service in services:
+            last_sync = db_manager.get_last_sync_time(service)
+            
+            if last_sync:
+                # Calculate age in hours
+                age_hours = (ctx.now - last_sync).total_seconds() / 3600
+                metrics.append(Metric.from_value(f"sync_last_{service}_hours_ago", int(age_hours), ctx.now))
+                
+                # Check if sync is too old (more than 24 hours)
+                if age_hours > 24:
+                    alerts.append(Alert(
+                        f"sync_{service}_stale", 
+                        f"{service.capitalize()} sync is {age_hours:.1f} hours old (last: {last_sync.strftime('%Y-%m-%d %H:%M %Z')})",
+                        severity="warning"
+                    ))
+                elif age_hours > 48:  # Critical if more than 2 days
+                    alerts.append(Alert(
+                        f"sync_{service}_very_stale", 
+                        f"{service.capitalize()} sync is {age_hours:.1f} hours old (last: {last_sync.strftime('%Y-%m-%d %H:%M %Z')})"
+                    ))
+            else:
+                # No sync history found
+                alerts.append(Alert(
+                    f"sync_{service}_never", 
+                    f"No sync history found for {service}"
+                ))
+                metrics.append(Metric(f"sync_last_{service}_hours_ago", -1, ctx.now))
+        
+        # Close database connection
+        db_manager.close()
+        
+    except Exception as e:
+        alerts.append(Alert(
+            "sync_status_check_error", 
+            f"Error checking sync status: {e}"
+        ))
+    
+    return metrics, alerts
+
+
+def check_playlist_counts(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
+    """Check playlist and track counts for both services."""
+    alerts: List[Alert] = []
+    metrics: List[Metric] = []
+    
+    try:
+        # Import database manager
+        from database_manager import DatabaseManager
+        
+        # Connect to database
+        db_manager = DatabaseManager()
+        
+        # Get playlist counts
+        services = ["yandex", "spotify"]
+        for service in services:
+            try:
+                # Get playlists count
+                db_manager.cursor.execute(
+                    "SELECT COUNT(*) as count FROM playlists WHERE service = %s",
+                    (service,)
+                )
+                result = db_manager.cursor.fetchone()
+                playlist_count = result["count"] if result else 0
+                metrics.append(Metric.from_value(f"playlists_{service}_count", playlist_count, ctx.now))
+                
+                # Get total tracks count
+                db_manager.cursor.execute(
+                    """
+                    SELECT COUNT(*) as count 
+                    FROM playlist_tracks pt 
+                    JOIN playlists p ON pt.playlist_pk = p.id 
+                    WHERE p.service = %s
+                    """,
+                    (service,)
+                )
+                result = db_manager.cursor.fetchone()
+                track_count = result["count"] if result else 0
+                metrics.append(Metric.from_value(f"tracks_{service}_count", track_count, ctx.now))
+                
+                # Check for empty playlists (potential issues)
+                if playlist_count == 0:
+                    alerts.append(Alert(
+                        f"playlists_{service}_empty", 
+                        f"No playlists found for {service} service",
+                        severity="warning"
+                    ))
+                
+            except Exception as e:
+                alerts.append(Alert(
+                    f"playlist_count_{service}_error", 
+                    f"Error getting playlist count for {service}: {e}"
+                ))
+        
+        # Close database connection
+        db_manager.close()
+        
+    except Exception as e:
+        alerts.append(Alert(
+            "playlist_count_check_error", 
+            f"Error checking playlist counts: {e}"
+        ))
+    
+    return metrics, alerts
+
+
 ALL_CHECKS = [
     check_load,
     check_memory,
@@ -477,6 +655,9 @@ ALL_CHECKS = [
     check_disk_iops,
     check_disk_usage,
     check_logs,
+    check_yandex_api_availability,
+    check_sync_status,
+    check_playlist_counts,
 ]
 
 
