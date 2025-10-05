@@ -8,11 +8,11 @@ prototype. The monitoring job is implemented in Python and scheduled by
 
 The entry point lives at `monitoring/monitor.py`. It collects runtime metrics,
 records them in a local SQLite database for 365 days, and ships alerts through
-a Telegram bot by default (SMTP fallback is optional). When invoked manually
+a Telegram bot by default. When invoked manually
 with no flags the script reads `monitoring/config.yaml`, prints the full report
-to stdout, and skips network delivery. Pass `--telegram` and/or `--email` to
+to stdout, and skips network delivery. Pass `--telegram` to
 enable notification channels (the systemd service opts into Telegram
-automatically and respects the e-mail flag rendered in the config). Every run
+automatically). Every run
 performs a lightweight `getUpdates` poll (when enabled) so that new users who
 press `/start` instantly receive a welcome brief about tracked checks and are
 added to the subscriber store.
@@ -72,9 +72,6 @@ overridden per environment. Notable options:
   подписчиков и `last_update_id`. По умолчанию лежит рядом со state.db.
 - `notification.telegram.poll_updates`: включает авто-регистрацию — бот раз в
   запуск читает `getUpdates` и добавляет всех, кто написал `/start` в личку.
-- `notification.mail.enabled`, `notification.mail.to`,
-  `notification.mail.from`, `notification.mail.subject`: SMTP fallback toggle
-  and message metadata when the mail channel is enabled.
 - `monitor_timer_interval`: systemd timer cadence (default 5 minutes).
 - `monitor_overwrite_config`: when `true`, Ansible will re-render
   `/opt/spondex/monitoring/config.yaml`; keep it `false` to preserve manual
@@ -88,8 +85,7 @@ overridden per environment. Notable options:
 
 The `monitoring` role (see `ansible/roles/monitoring`) performs the following:
 
-1. Installs required packages (`sysstat`, `curl`, `python3-venv`) and, when the
-  mail channel is enabled, pulls in `mailutils` + `exim4`.
+1. Installs required packages (`sysstat`, `curl`, `python3-venv`).
 2. Creates the state directory (`/var/lib/spondex-monitor`).
 3. Marks the monitoring script executable and drops the templated config.
 4. Installs `systemd` service + timer units and enables the timer. The unit now
@@ -124,8 +120,6 @@ per-environment, for example:
 ```bash
 ansible-playbook -i inventory/prod ansible/deploy.yml \
   --extra-vars "monitor_telegram_chat_ids=['123456789']" \
-  --extra-vars "monitor_mail_enabled=true" \
-  --extra-vars "monitor_mail_to=['alerts@example.com']" \
   --extra-vars "monitor_timer_interval=10m"
 ```
 
@@ -238,17 +232,6 @@ will pick up the new thresholds automatically.
   используется `systemd`-юнитом после основного запуска. Инструмент можно
   вызывать вручную для хаотичного синка или при отладке Telegram.
 
-### SMTP fallback (опционально)
-
-- Включите канал, выставив `monitor_mail_enabled=true` (или
-  `notification.mail.enabled=true`). Тогда роль установит `mailutils` и `exim4`
-  и добавит почтовую секцию в конфиг.
-- Получатели/заголовки управляются через `monitor_mail_to`,
-  `monitor_mail_from`, `monitor_mail_subject`, дополнительные копии — через
-  `monitor_mail_cc`.
-- Сообщения отправляются на `localhost:25`; убедитесь, что MTA настроен на
-  доставку во внешние домены или нужный релей.
-
 ## Local testing
 
 Запустите скрипт локально с нужными каналами:
@@ -257,7 +240,7 @@ will pick up the new thresholds automatically.
 python -m monitoring.monitor --config monitoring/config.sample.yaml --telegram
 ```
 
-Добавьте `--email`, если нужно проверить SMTP. Флаг `--test-notify` выполнит
+Флаг `--test-notify` выполнит
 проверку конфигурации и отослёт короткое сообщение в выбранные каналы.
 
 На продакшене скрипт исполняемый, поэтому его можно запускать напрямую как

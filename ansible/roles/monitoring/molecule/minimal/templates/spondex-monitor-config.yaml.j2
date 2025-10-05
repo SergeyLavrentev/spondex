@@ -90,23 +90,3 @@ notification:
     bot_token_env: {{ monitor_telegram_bot_token_env | to_json }}
     api_base: {{ monitor_telegram_api_base | to_json }}
     request_timeout: {{ monitor_telegram_request_timeout }}
-  mail:
-    enabled: {{ monitor_mail_enabled | bool | string | lower }}
-    recipients:
-{% if monitor_mail_to | default([]) | length > 0 %}
-{% for recipient in monitor_mail_to %}
-      - {{ recipient | to_json }}
-{% endfor %}
-{% else %}
-      - "root@localhost"
-{% endif %}
-    sender: {{ monitor_mail_from | to_json }}
-    subject_prefix: {{ monitor_mail_subject | to_json }}
-    cc:
-{% if monitor_mail_cc | default([]) | length > 0 %}
-{% for cc in monitor_mail_cc %}
-      - {{ cc | to_json }}
-{% endfor %}
-{% else %}
-      []
-{% endif %}

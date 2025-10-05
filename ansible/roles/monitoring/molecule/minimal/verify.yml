@@ -1,5 +1,5 @@
 ---
-- name: Verify (mail disabled)
+- name: Verify (minimal installation)
   hosts: all
   become: true
   vars:
@@ -57,17 +57,6 @@
           - "'Spondex monitoring configuration' in (monitor_config_overwritten.content | b64decode)"
           - "'manual_override' not in (monitor_config_overwritten.content | b64decode)"
         fail_msg: "Template was not restored after overwrite"
-
-    - name: Gather package facts
-      ansible.builtin.package_facts:
-        manager: apt
-
-    - name: Ensure mail packages were not installed
-      ansible.builtin.assert:
-        that:
-          - "'exim4' not in ansible_facts.packages"
-          - "'mailutils' not in ansible_facts.packages"
-        fail_msg: "Mail packages should not be installed when monitor_mail_enabled=false"
 
     - name: Check monitoring timer state
       ansible.builtin.command:

@@ -1,5 +1,5 @@
 ---
-- name: Converge (mail disabled)
+- name: Converge (minimal installation)
   hosts: all
   become: true
   vars:

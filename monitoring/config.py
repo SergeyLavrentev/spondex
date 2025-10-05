@@ -55,15 +55,6 @@ class LogCheck:
 
 
 @dataclass
-class MailNotification:
-    enabled: bool = False
-    recipients: List[str] = field(default_factory=lambda: ["root@localhost"])
-    sender: str = "spondex-monitor@localhost"
-    subject_prefix: str = "[Spondex Monitor]"
-    cc: List[str] = field(default_factory=list)
-
-
-@dataclass
 class TelegramNotification:
     enabled: bool = True
     chat_ids: List[str] = field(default_factory=list)
@@ -77,7 +68,6 @@ class TelegramNotification:
 
 @dataclass
 class NotificationConfig:
-    mail: MailNotification = field(default_factory=MailNotification)
     telegram: TelegramNotification = field(default_factory=TelegramNotification)
 
 
@@ -169,27 +159,12 @@ def load_config(path: Optional[Path] = None) -> Config:
     notif = data.get("notification", {})
 
     # Backwards compatibility: allow flat notification schema
-    if "mail" in notif or "telegram" in notif:
-        mail_section = notif.get("mail", {})
+    if "telegram" in notif:
         telegram_section = notif.get("telegram", {})
     else:
-        mail_section = {
-            "enabled": bool(data.get("enable_email", False)),
-            "recipients": notif.get("mail_to", ["root@localhost"]),
-            "sender": notif.get("mail_from", "spondex-monitor@localhost"),
-            "subject_prefix": notif.get("subject_prefix", "[Spondex Monitor]"),
-            "cc": data.get("additional_recipients", []),
-        }
         telegram_section = {}
 
     notification = NotificationConfig(
-        mail=MailNotification(
-            enabled=bool(mail_section.get("enabled", False)),
-            recipients=list(mail_section.get("recipients", ["root@localhost"])),
-            sender=mail_section.get("sender", "spondex-monitor@localhost"),
-            subject_prefix=mail_section.get("subject_prefix", "[Spondex Monitor]"),
-            cc=list(mail_section.get("cc", [])),
-        ),
         telegram=TelegramNotification(
             enabled=bool(telegram_section.get("enabled", True)),
             chat_ids=[str(item) for item in telegram_section.get("chat_ids", [])],

@@ -8,21 +8,6 @@ from monitoring.config import Config
 from monitoring.notifier import poll_telegram_subscribers, send_notifications
 
 
-class _SMTPStub:
-    def __init__(self) -> None:
-        self.sent_messages: list[dict[str, Any]] = []
-
-    def __enter__(self) -> "_SMTPStub":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - standard context behaviour
-        pass
-
-    # signature aligned with smtplib.SMTP.send_message
-    def send_message(self, msg, to_addrs=None):  # type: ignore[no-untyped-def]
-        self.sent_messages.append({"message": msg, "to_addrs": to_addrs})
-
-
 class _ResponseStub:
     def __init__(self, payload: dict[str, Any]) -> None:
         self._payload = payload
@@ -41,7 +26,6 @@ def test_send_notifications_telegram(monkeypatch):
     config = Config()
     config.notification.telegram.enabled = True
     config.notification.telegram.chat_ids = ["123"]
-    config.notification.mail.enabled = False
 
     token_env = config.notification.telegram.bot_token_env
     monkeypatch.setenv(token_env, "secret-token")
@@ -63,7 +47,6 @@ def test_send_notifications_telegram_inline_token(monkeypatch):
     config.notification.telegram.enabled = True
     config.notification.telegram.chat_ids = ["777"]
     config.notification.telegram.token = "inline-token"
-    config.notification.mail.enabled = False
 
     token_env = config.notification.telegram.bot_token_env
     monkeypatch.delenv(token_env, raising=False)
@@ -88,7 +71,6 @@ def test_send_notifications_telegram_auto_register(monkeypatch, tmp_path):
     config.notification.telegram.poll_updates = True
     store_path = tmp_path / "subs.json"
     config.notification.telegram.subscriber_store = store_path
-    config.notification.mail.enabled = False
 
     messages: list[dict[str, Any]] = []
 
@@ -136,7 +118,6 @@ def test_send_notifications_telegram_existing_subscribers(monkeypatch, tmp_path)
     config.notification.telegram.poll_updates = False
     store_path = tmp_path / "subs.json"
     config.notification.telegram.subscriber_store = store_path
-    config.notification.mail.enabled = False
 
     store_path.write_text(
         json.dumps({"chat_ids": ["101", "202"], "last_update_id": 99}),
@@ -162,7 +143,6 @@ def test_send_notifications_telegram_with_alert(monkeypatch):
     config.notification.telegram.enabled = True
     config.notification.telegram.chat_ids = ["4242"]
     config.notification.telegram.token = "inline-token"
-    config.notification.mail.enabled = False
 
     captured = []
 
@@ -180,25 +160,10 @@ def test_send_notifications_telegram_with_alert(monkeypatch):
     assert captured and captured[0]["chat_id"] == "4242"
 
 
-def test_send_notifications_email(monkeypatch):
-    config = Config()
-    config.notification.mail.enabled = True
-    config.notification.mail.recipients = ["ops@example.com"]
-    config.notification.telegram.enabled = False
-
-    smtp_stub = _SMTPStub()
-    monkeypatch.setattr("monitoring.notifier.smtplib.SMTP", lambda host: smtp_stub)
-
-    errors = send_notifications(config, [SimpleNamespace()], "Alert", force=True)
-    assert errors == []
-    assert smtp_stub.sent_messages
-
-
 def test_send_notifications_missing_telegram_token(monkeypatch):
     config = Config()
     config.notification.telegram.enabled = True
     config.notification.telegram.chat_ids = ["123"]
-    config.notification.mail.enabled = False
 
     token_env = config.notification.telegram.bot_token_env
     monkeypatch.delenv(token_env, raising=False)
@@ -210,7 +175,6 @@ def test_send_notifications_missing_telegram_token(monkeypatch):
 def test_send_notifications_no_channels():
     config = Config()
     config.notification.telegram.enabled = False
-    config.notification.mail.enabled = False
 
     errors = send_notifications(config, [SimpleNamespace()], "body")
     assert errors == []
@@ -232,7 +196,6 @@ def test_poll_telegram_subscribers(monkeypatch, tmp_path):
     config.notification.telegram.token = "inline-token"
     config.notification.telegram.subscriber_store = tmp_path / "subs.json"
     config.notification.telegram.chat_ids = []
-    config.notification.mail.enabled = False
 
     actions: list[str] = []
 
@@ -269,3 +232,67 @@ def test_poll_telegram_subscribers(monkeypatch, tmp_path):
     saved = json.loads(config.notification.telegram.subscriber_store.read_text(encoding="utf-8"))
     assert saved["chat_ids"] == ["515"]
     assert saved["last_update_id"] == 99
+
+
+def test_poll_telegram_subscribers_status_command(monkeypatch, tmp_path):
+    config = Config()
+    config.notification.telegram.enabled = True
+    config.notification.telegram.poll_updates = True
+    config.notification.telegram.token = "inline-token"
+    config.notification.telegram.subscriber_store = tmp_path / "subs.json"
+    config.notification.telegram.chat_ids = []
+    config.state_path = tmp_path / "state.db"
+
+    actions: list[str] = []
+    sent_messages: list[dict[str, Any]] = []
+
+    def fake_urlopen(request, timeout):  # type: ignore[no-untyped-def]
+        url = request.full_url if hasattr(request, "full_url") else request.get_full_url()
+        if "getUpdates" in url:
+            actions.append("poll")
+            return _ResponseStub(
+                {
+                    "ok": True,
+                    "result": [
+                        {
+                            "update_id": 100,
+                            "message": {
+                                "text": "/start",
+                                "chat": {"id": 515, "type": "private"},
+                            },
+                        },
+                        {
+                            "update_id": 101,
+                            "message": {
+                                "text": "/status",
+                                "chat": {"id": 515, "type": "private"},
+                            },
+                        }
+                    ],
+                }
+            )
+        payload = json.loads(request.data.decode("utf-8"))
+        actions.append(f"message:{payload['chat_id']}")
+        sent_messages.append(payload)
+        return _ResponseStub({"ok": True})
+
+    monkeypatch.setattr("monitoring.notifier.urllib.request.urlopen", fake_urlopen)
+
+    result = poll_telegram_subscribers(config)
+
+    assert result is True
+    assert actions[0] == "poll"
+    assert actions[1] == "message:515"  # /start message
+    assert actions[2] == "message:515"  # /status message
+
+    # Check that status message was sent
+    assert len(sent_messages) == 2
+    status_message = sent_messages[1]
+    assert status_message["chat_id"] == "515"
+    assert "text" in status_message
+    # The status message should contain either status info or an error message
+    assert "Spondex" in status_message["text"] or "Error" in status_message["text"]
+
+    saved = json.loads(config.notification.telegram.subscriber_store.read_text(encoding="utf-8"))
+    assert saved["chat_ids"] == ["515"]
+    assert saved["last_update_id"] == 101

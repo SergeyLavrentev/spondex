@@ -27,16 +27,13 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Spondex monitoring checks")
     parser.add_argument("--config", type=str, help="Path to monitoring config YAML", default=None)
-    parser.add_argument("--email", dest="email", action="store_true", help="Enable email notifications for this run")
-    parser.add_argument("--no-email", dest="email", action="store_false", help="Disable email notifications for this run")
     parser.add_argument("--telegram", dest="telegram", action="store_true", help="Enable Telegram notifications for this run")
     parser.add_argument("--no-telegram", dest="telegram", action="store_false", help="Disable Telegram notifications for this run")
-    parser.set_defaults(email=None, telegram=None)
+    parser.set_defaults(telegram=None)
     parser.add_argument("--print", dest="print_report", action="store_true", help="Print alerts and metrics to stdout (default)")
     parser.add_argument("--no-print", dest="print_report", action="store_false", help="Suppress stdout output")
     parser.set_defaults(print_report=None)
     parser.add_argument("--test-notify", action="store_true", help="Send a test notification using all enabled channels")
-    parser.add_argument("--test-email", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--poll-telegram-updates",
         action="store_true",
@@ -83,8 +80,6 @@ def main() -> int:
     else:
         config = load_config()
 
-    if args.email is not None:
-        config.notification.mail.enabled = args.email
     if args.telegram is not None:
         config.notification.telegram.enabled = args.telegram
 
@@ -116,7 +111,7 @@ def main() -> int:
     if should_print:
         print(report)
 
-    test_requested = args.test_notify or args.test_email
+    test_requested = args.test_notify
     if test_requested:
         errors = send_notifications(config, [], report, force=True)
         if errors:

@@ -1,5 +1,4 @@
 ---
-monitor_mail_enabled: false
 monitor_overwrite_config: false
 monitor_telegram_enabled: false
 monitor_app_containers:

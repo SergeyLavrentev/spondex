@@ -85,7 +85,7 @@
 
     - name: Execute monitoring checks in dry-run mode
       ansible.builtin.command:
-        cmd: "{{ monitor_virtualenv_dir }}/bin/python -m monitoring.monitor --config {{ app_root }}/monitoring/config.yaml --no-email --no-telegram --no-print"
+        cmd: "{{ monitor_virtualenv_dir }}/bin/python -m monitoring.monitor --config {{ app_root }}/monitoring/config.yaml --no-telegram --no-print"
         chdir: "{{ app_root }}"
       register: monitoring_dry_run
       changed_when: false

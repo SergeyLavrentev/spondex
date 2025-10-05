@@ -5,36 +5,6 @@
     state: present
     update_cache: true
 
-- name: Ensure mail notification packages are installed
-  ansible.builtin.apt:
-    name: "{{ monitor_mail_packages }}"
-    state: present
-    update_cache: true
-  when: monitor_mail_enabled | bool
-
-- name: Ensure mailname is configured for MTA
-  ansible.builtin.copy:
-    dest: /etc/mailname
-    content: "{{ monitor_mta_mailname | trim }}\n"
-    mode: "0644"
-  when: monitor_mail_enabled | bool
-  notify: Regenerate exim4 configuration
-
-- name: Render exim4 update configuration
-  ansible.builtin.template:
-    src: update-exim4.conf.conf.j2
-    dest: /etc/exim4/update-exim4.conf.conf
-    mode: "0644"
-  when: monitor_mail_enabled | bool
-  notify: Regenerate exim4 configuration
-
-- name: Ensure exim4 service is enabled and running
-  ansible.builtin.systemd:
-    name: exim4
-    enabled: true
-    state: started
-  when: monitor_mail_enabled | bool and (monitor_systemd_enabled | default(true)) | bool
-
 - name: Ensure uv install directory exists
   ansible.builtin.file:
     path: "{{ monitor_uv_install_dir }}"

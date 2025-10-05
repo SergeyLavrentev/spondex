@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import json
 import os
-import smtplib
 import urllib.error
 import urllib.request
-from email.message import EmailMessage
 from pathlib import Path
 from typing import Iterable, List, Optional, Set, Tuple
 
 from urllib.parse import urlencode
 
-from .checks import Alert
+from .checks import Alert, CheckContext
 from .config import Config
 
 
@@ -242,53 +240,58 @@ def _poll_telegram_updates(
         if not message:
             continue
         chat = message.get("chat")
-        if not chat or chat.get("type") != "private":
+        if not chat:
             continue
-        text = message.get("text", "")
-        if text.strip() != "/start":
-            continue
+        text = message.get("text", "").strip()
         chat_id = chat.get("id")
-        if chat_id is not None:
-            chat_id_str = str(chat_id)
+        if chat_id is None:
+            continue
+        chat_id_str = str(chat_id)
+        
+        if text == "/start" and chat.get("type") == "private":
             if chat_id_str not in chat_ids:
                 new_chat_ids.add(chat_id_str)
             chat_ids.add(chat_id_str)
+        elif text == "/status" and chat_id_str in chat_ids:
+            # Handle /status command for subscribed users
+            _handle_status_command(config, token, chat_id_str)
 
     return chat_ids, max_update_id, new_chat_ids
 
 
-def build_email(config: Config, alerts: Iterable[Alert], body: str) -> EmailMessage:
-    mail_cfg = config.notification.mail
-    msg = EmailMessage()
-    msg["From"] = mail_cfg.sender
-    msg["To"] = ", ".join(mail_cfg.recipients)
-    if mail_cfg.cc:
-        msg["Cc"] = ", ".join(mail_cfg.cc)
-    subject_prefix = mail_cfg.subject_prefix or "Spondex Monitor"
-    subject_tail = "Alerts" if alerts else "Report"
-    msg["Subject"] = f"{subject_prefix} {subject_tail}".strip()
-    msg.set_content(body)
-    return msg
-
-
-def send_alert_email(config: Config, alerts: list[Alert], body: str, *, force: bool = False) -> bool:
-    mail_cfg = config.notification.mail
-    if not mail_cfg.enabled:
-        return False
-    if not (force or alerts):
-        return False
-
-    msg = build_email(config, alerts, body)
-    recipients = _unique(mail_cfg.recipients + mail_cfg.cc)
+def _handle_status_command(config: Config, token: str, chat_id: str) -> None:
+    """Handle /status command by sending current metrics to the user."""
     try:
-        with smtplib.SMTP("localhost") as smtp:
-            smtp.send_message(msg, to_addrs=recipients or None)
-    except Exception as exc:  # pragma: no cover - network failure handling
-        raise RuntimeError(f"Mail delivery failed: {exc}") from exc
-    return True
+        from .checks import run_checks
+        from .monitor import format_report
+        from .storage import StateStore
+        from datetime import datetime, UTC
+        
+        # Get current metrics
+        now = datetime.now(UTC)
+        store = StateStore(config.state_path)
+        ctx = CheckContext(config=config, store=store, now=now)
+        
+        metrics, alerts = run_checks(ctx)
+        
+        # Format report
+        report = format_report(now, alerts, metrics)
+        
+        # Send to user
+        _send_telegram_message(config, token, chat_id, report, timeout=config.notification.telegram.request_timeout)
+        
+    except Exception as e:
+        # Send error message if something goes wrong
+        error_msg = f"Error getting status: {str(e)}"
+        try:
+            _send_telegram_message(config, token, chat_id, error_msg, timeout=config.notification.telegram.request_timeout)
+        except Exception:
+            pass  # Ignore errors when sending error messages
 
 
 def _telegram_endpoint(config: Config, token: str) -> str:
+    base = config.notification.telegram.api_base.rstrip("/")
+    return f"{base}/bot{token}/sendMessage"
     base = config.notification.telegram.api_base.rstrip("/")
     return f"{base}/bot{token}/sendMessage"
 
@@ -358,17 +361,10 @@ def send_notifications(config: Config, alerts: list[Alert], body: str, *, force:
     except RuntimeError as exc:
         errors.append(f"telegram: {exc}")
 
-    try:
-        send_alert_email(config, alerts, body, force=force)
-    except RuntimeError as exc:
-        errors.append(f"email: {exc}")
-
     return errors
 
 
 __all__ = [
-    "build_email",
-    "send_alert_email",
     "send_alert_telegram",
     "poll_telegram_subscribers",
     "send_notifications",

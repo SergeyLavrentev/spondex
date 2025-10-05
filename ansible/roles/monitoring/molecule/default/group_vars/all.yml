@@ -1,8 +1,5 @@
 ---
 monitor_overwrite_config: false
-monitor_mail_enabled: true
-monitor_mail_to:
-  - ops@example.com
 monitor_telegram_chat_ids:
   - "123456789"
 monitor_telegram_bot_token: "dummy-token"

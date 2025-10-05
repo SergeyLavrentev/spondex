@@ -36,6 +36,5 @@
       ansible.builtin.include_role:
         name: monitoring
       vars:
-        monitor_mail_enabled: false
         # Disable systemd services for molecule testing
         monitor_systemd_enabled: false
