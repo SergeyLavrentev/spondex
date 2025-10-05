@@ -1518,6 +1518,8 @@ class MusicSynchronizer:
     def sync_playlists(
         self, force_full_sync: bool, include_followed_spotify: bool
     ) -> None:
+        current_time = _now_utc()
+        
         yandex_playlists = self.yandex.get_playlists(force_full_sync)
         spotify_playlists = self.spotify.get_playlists(
             force_full_sync, include_followed=include_followed_spotify
@@ -1534,6 +1536,10 @@ class MusicSynchronizer:
         updated_yandex = self.yandex.get_playlists(force_full_sync)
         self._record_playlist_snapshots("yandex", updated_yandex)
         self._record_playlist_snapshots("spotify", spotify_playlists)
+        
+        # Update sync timestamps
+        self.db_manager.update_last_sync_time("yandex", current_time)
+        self.db_manager.update_last_sync_time("spotify", current_time)
 
     def _store_favorite_albums(
         self, service: str, albums: Sequence[FavoriteAlbum]
@@ -1569,6 +1575,8 @@ class MusicSynchronizer:
         self.db_manager.remove_favorite_artists_not_in(service, ids)
 
     def sync_favorite_albums(self, readonly: bool, target: str) -> None:
+        current_time = _now_utc()
+        
         yandex_albums = self.yandex.get_favorite_albums()
         spotify_albums = self.spotify.get_favorite_albums()
 
@@ -1630,8 +1638,14 @@ class MusicSynchronizer:
                         album.album_id,
                         album_key(album),
                     )
+        
+        # Update sync timestamps
+        self.db_manager.update_last_sync_time("yandex", current_time)
+        self.db_manager.update_last_sync_time("spotify", current_time)
 
     def sync_favorite_artists(self, readonly: bool, target: str) -> None:
+        current_time = _now_utc()
+        
         yandex_artists = self.yandex.get_favorite_artists()
         spotify_artists = self.spotify.get_favorite_artists()
 
@@ -1685,6 +1699,10 @@ class MusicSynchronizer:
                         artist.artist_id,
                         artist_key(artist),
                     )
+        
+        # Update sync timestamps
+        self.db_manager.update_last_sync_time("yandex", current_time)
+        self.db_manager.update_last_sync_time("spotify", current_time)
 
 
 def parse_arguments():
