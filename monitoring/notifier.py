@@ -265,10 +265,10 @@ def _handle_status_command(config: Config, token: str, chat_id: str) -> None:
         from .checks import run_checks
         from .monitor import format_report
         from .storage import StateStore
-        from datetime import datetime, UTC
+        from datetime import datetime
         
         # Get current metrics
-        now = datetime.now(UTC)
+        now = datetime.now().astimezone()
         store = StateStore(config.state_path)
         ctx = CheckContext(config=config, store=store, now=now)
         
