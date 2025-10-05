@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import List
 
 from pathlib import Path
