@@ -1412,7 +1412,6 @@ class MusicSynchronizer:
         self, service: str, playlists: Sequence[PlaylistSnapshot]
     ) -> None:
         playlist_ids: List[str] = []
-        snapshot_time = _now_utc()
         for playlist in playlists:
             playlist_ids.append(playlist.playlist_id)
             playlist_pk = self.db_manager.upsert_playlist(
