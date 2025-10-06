@@ -1420,7 +1420,6 @@ class MusicSynchronizer:
                 playlist_id=playlist.playlist_id,
                 name=playlist.name,
                 owner=playlist.owner,
-                last_synced=snapshot_time,
             )
             track_rows = []
             seen_track_ids = set()

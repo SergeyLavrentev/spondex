@@ -75,16 +75,6 @@ class DatabaseManager:
         result = self.cursor.fetchone()
         return result["yandex_id"] if result else None
 
-    def add_undiscovered_track(self, service: str, artist: str, title: str):
-        self.cursor.execute(
-            """
-            INSERT INTO undiscovered_tracks (service, artist, title)
-            VALUES (%s, %s, %s)
-            """,
-            (service, artist, title)
-        )
-        self.conn.commit()
-
     # --- Album & artist link helpers -----------------------------------
 
     def link_album_ids(
@@ -199,36 +189,21 @@ class DatabaseManager:
         playlist_id: str,
         name: Optional[str],
         owner: Optional[str],
-        last_synced: Optional[datetime.datetime] = None,
     ) -> int:
         self.cursor.execute(
             """
-            INSERT INTO playlists (service, playlist_id, name, owner, last_synced)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO playlists (service, playlist_id, name, owner)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (service, playlist_id) DO UPDATE
             SET name = EXCLUDED.name,
-                owner = EXCLUDED.owner,
-                last_synced = EXCLUDED.last_synced
+                owner = EXCLUDED.owner
             RETURNING id
             """,
-            (service, playlist_id, name, owner, last_synced),
+            (service, playlist_id, name, owner),
         )
         playlist_pk = self.cursor.fetchone()["id"]
         self.conn.commit()
         return playlist_pk
-
-    def update_playlist_last_synced(
-        self, service: str, playlist_id: str, sync_time: datetime.datetime
-    ) -> None:
-        self.cursor.execute(
-            """
-            UPDATE playlists
-            SET last_synced = %s
-            WHERE service = %s AND playlist_id = %s
-            """,
-            (sync_time, service, playlist_id),
-        )
-        self.conn.commit()
 
     def get_playlist(self, service: str, playlist_id: str) -> Optional[Dict[str, Any]]:
         self.cursor.execute(

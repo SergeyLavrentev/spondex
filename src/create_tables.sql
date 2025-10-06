@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS sync_history (
     last_sync TIMESTAMP WITH TIME ZONE
 );
 
--- Создание таблицы для хранения треков
+-- Создание таблицы для хранения треков (маппинг между сервисами)
 CREATE TABLE IF NOT EXISTS tracks (
     yandex_id VARCHAR(50),
     spotify_id VARCHAR(50),
@@ -13,15 +13,6 @@ CREATE TABLE IF NOT EXISTS tracks (
     PRIMARY KEY (yandex_id, spotify_id)
 );
 
--- Создание таблицы для ненайденных треков
-CREATE TABLE IF NOT EXISTS undiscovered_tracks (
-    id SERIAL PRIMARY KEY,
-    service VARCHAR(50),
-    artist VARCHAR(255),
-    title VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-); 
-
 -- Создание таблицы плейлистов
 CREATE TABLE IF NOT EXISTS playlists (
     id SERIAL PRIMARY KEY,
@@ -29,7 +20,6 @@ CREATE TABLE IF NOT EXISTS playlists (
     playlist_id VARCHAR(100) NOT NULL,
     name VARCHAR(255),
     owner VARCHAR(255),
-    last_synced TIMESTAMP WITH TIME ZONE,
     UNIQUE(service, playlist_id)
 );
 
