@@ -519,6 +519,22 @@ class YandexMusic(MusicService):
                         raise
                     current_playlist = trimmed
                     continue
+                elif attempt == 0 and self._is_wrong_revision_error(exc):
+                    logger.warning(
+                        "Revision плейлиста %s устарел, обновляю данные плейлиста",
+                        getattr(current_playlist, "title", getattr(current_playlist, "kind", "unknown")),
+                    )
+                    refreshed_playlist = self.fetch_playlist(str(getattr(current_playlist, "kind", "")))
+                    if refreshed_playlist:
+                        current_playlist = refreshed_playlist
+                        continue
+                    else:
+                        logger.error(
+                            "Не удалось обновить плейлист %s: %s",
+                            getattr(current_playlist, "title", getattr(current_playlist, "kind", "unknown")),
+                            exc,
+                        )
+                        raise
                 raise
 
         return current_playlist
@@ -646,6 +662,30 @@ class YandexMusic(MusicService):
                     if name is None:
                         name = getattr(item, "name", None)
                 if name == "playlist-full":
+                    return True
+
+        return False
+
+    @staticmethod
+    def _is_wrong_revision_error(exc: Exception) -> bool:
+        if not isinstance(exc, YandexMusicError):
+            return False
+
+        message = " ".join(str(arg) for arg in exc.args if arg)
+        if message and "wrong-revision" in message:
+            return True
+
+        errors = getattr(exc, "errors", None)
+        if isinstance(errors, (list, tuple)):
+            for item in errors:
+                name = None
+                if isinstance(item, dict):
+                    name = item.get("name")
+                else:
+                    name = getattr(item, "get", lambda *_: None)("name")
+                    if name is None:
+                        name = getattr(item, "name", None)
+                if name == "wrong-revision":
                     return True
 
         return False
