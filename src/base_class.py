@@ -4,7 +4,7 @@ from models import FavoriteAlbum, FavoriteArtist, PlaylistSnapshot
 
 
 class MusicService:
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.db_manager = db_manager
 
     def get_tracks(self, force_full_sync: bool) -> List[dict]:

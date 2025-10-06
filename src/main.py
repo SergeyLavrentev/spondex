@@ -213,8 +213,8 @@ def status():
 
 
 class YandexMusic(MusicService):
-    def __init__(self, db_manager: DatabaseManager, token: str):
-        super().__init__(db_manager)
+    def __init__(self, token: str):
+        super().__init__()
         self.client = YandexClient(token=token).init()
         self._max_attempts = 5
         self._base_retry_delay = 1.5
@@ -254,23 +254,8 @@ class YandexMusic(MusicService):
         short_tracks = self.client.users_likes_tracks()
         full_tracks = []
 
-        last_sync = (
-            self.db_manager.get_last_sync_time("yandex")
-            if not force_full_sync
-            else None
-        )
-        if last_sync:
-            last_sync = last_sync.replace(tzinfo=datetime.timezone.utc)
-
         for track in short_tracks:
-            added_at = datetime.datetime.strptime(
-                track.timestamp, "%Y-%m-%dT%H:%M:%S%z"
-            ) + datetime.timedelta(hours=3)
-            if force_full_sync or not self.db_manager.check_track_exists(
-                "yandex", track.id
-            ):
-                if last_sync is None or added_at > last_sync:
-                    full_tracks.append(track.fetch_track())
+            full_tracks.append(track.fetch_track())
 
         return full_tracks
 
@@ -290,9 +275,6 @@ class YandexMusic(MusicService):
             return yandex_track["id"]
         logger.warning(
             f"Track not found in Yandex: {track['track']['artists'][0]['name']} - {track['track']['name']}"
-        )
-        self.db_manager.add_undiscovered_track(
-            "yandex", track["track"]["artists"][0]["name"], track["track"]["name"]
         )
         return None
 
@@ -337,24 +319,6 @@ class YandexMusic(MusicService):
         title: Optional[str],
         artist: Optional[str],
     ) -> Optional[Tuple[str, str, str]]:
-        if spotify_track_id:
-            stored_id = self.db_manager.get_yandex_id(spotify_track_id)
-        else:
-            stored_id = None
-
-        track_part: Optional[str] = None
-        album_part: Optional[str] = None
-
-        if stored_id:
-            if ":" in stored_id:
-                track_part, album_part = stored_id.split(":", 1)
-            else:
-                track_part = stored_id
-                album_part = self._get_album_id_for_track(stored_id)
-            if track_part and album_part:
-                composite = f"{track_part}:{album_part}"
-                return track_part, album_part, composite
-
         if not title or not artist:
             return None
 
@@ -874,8 +838,8 @@ class YandexMusic(MusicService):
 
 
 class SpotifyMusic(MusicService):
-    def __init__(self, db_manager: DatabaseManager):
-        super().__init__(db_manager)
+    def __init__(self):
+        super().__init__()
         required_scopes = " ".join(
             [
                 "user-library-read",
@@ -998,14 +962,6 @@ class SpotifyMusic(MusicService):
                 time.sleep(self._base_retry_delay * (2 ** (attempt - 1)))
 
     def get_tracks(self, force_full_sync: bool) -> List[dict]:
-        last_sync = (
-            self.db_manager.get_last_sync_time("spotify")
-            if not force_full_sync
-            else None
-        )
-        if last_sync:
-            last_sync = last_sync.replace(tzinfo=datetime.timezone.utc)
-
         results = self._execute_with_retry(
             "Fetch Spotify saved tracks", self.client.current_user_saved_tracks
         )
@@ -1013,21 +969,9 @@ class SpotifyMusic(MusicService):
 
         while results["items"]:
             for item in results["items"]:
-                track = item["track"]
-                added_at = datetime.datetime.strptime(
-                    item["added_at"], "%Y-%m-%dT%H:%M:%SZ"
-                ).replace(tzinfo=datetime.timezone.utc) + datetime.timedelta(hours=3)
-                if force_full_sync or last_sync is None or added_at > last_sync:
-                    if force_full_sync or not self.db_manager.check_track_exists(
-                        "spotify", track["id"]
-                    ):
-                        tracks.append(item)
+                tracks.append(item)
 
-            if results["next"] and (
-                force_full_sync
-                or not last_sync
-                or any(added_at > last_sync for item in results["items"])
-            ):
+            if results["next"]:
                 results = self._execute_with_retry(
                     "Fetch next page of Spotify saved tracks",
                     lambda: self.client.next(results),
@@ -1058,9 +1002,6 @@ class SpotifyMusic(MusicService):
             else:
                 logger.warning(
                     f"Track not found in Spotify: {track.artists[0].name} - {track.title}"
-                )
-                self.db_manager.add_undiscovered_track(
-                    "spotify", track.artists[0].name, track.title
                 )
         else:
             logger.info(
@@ -1337,11 +1278,9 @@ class MusicSynchronizer:
         self,
         yandex_service: YandexMusic,
         spotify_service: SpotifyMusic,
-        db_manager: DatabaseManager,
     ):
         self.yandex = yandex_service
         self.spotify = spotify_service
-        self.db_manager = db_manager
 
     def sync_tracks(
         self,
@@ -1356,16 +1295,11 @@ class MusicSynchronizer:
             for track in yandex_tracks:
                 spotify_id = self.spotify.add_track(track)
                 if spotify_id:
-                    self.db_manager.insert_or_update_track(
-                        track.id, spotify_id, track.artists[0].name, track.title
-                    )
                     logger.info(
                         "Добавлен трек в Spotify: %s - %s",
                         track.artists[0].name,
                         track.title,
                     )
-
-            self.db_manager.update_last_sync_time("yandex", current_time)
         else:
             logger.info(
                 "Пропуск синхронизации треков в Spotify (target=%s)",
@@ -1379,19 +1313,11 @@ class MusicSynchronizer:
                 track = item["track"]
                 yandex_id = self.yandex.add_track(item)
                 if yandex_id:
-                    self.db_manager.insert_or_update_track(
-                        yandex_id,
-                        track["id"],
-                        track["artists"][0]["name"],
-                        track["name"],
-                    )
                     logger.info(
                         "Добавлен трек в Yandex: %s - %s",
                         track["artists"][0]["name"],
                         track["name"],
                     )
-
-            self.db_manager.update_last_sync_time("spotify", current_time)
         else:
             logger.info(
                 "Пропуск синхронизации треков в Yandex (target=%s)",
@@ -1402,34 +1328,6 @@ class MusicSynchronizer:
         self.spotify.remove_duplicates()
         self.yandex.remove_duplicates()
 
-    def _record_playlist_snapshots(
-        self, service: str, playlists: Sequence[PlaylistSnapshot]
-    ) -> None:
-        playlist_ids: List[str] = []
-        for playlist in playlists:
-            playlist_ids.append(playlist.playlist_id)
-            playlist_pk = self.db_manager.upsert_playlist(
-                service=service,
-                playlist_id=playlist.playlist_id,
-                name=playlist.name,
-                owner=playlist.owner,
-            )
-            track_rows = []
-            seen_track_ids = set()
-            for track in playlist.tracks:
-                if not track.track_id:
-                    continue
-                if track.track_id in seen_track_ids:
-                    continue
-                seen_track_ids.add(track.track_id)
-                track_rows.append((track.track_id, track.position, track.added_at))
-            self.db_manager.set_playlist_tracks(
-                playlist_pk,
-                service,
-                track_rows,
-            )
-
-        self.db_manager.remove_playlists_not_in(service, playlist_ids)
 
     def _sync_spotify_playlists_to_yandex(
         self,
@@ -1529,8 +1427,6 @@ class MusicSynchronizer:
     def sync_playlists(
         self, force_full_sync: bool, include_followed_spotify: bool
     ) -> None:
-        current_time = _now_utc()
-        
         yandex_playlists = self.yandex.get_playlists(force_full_sync)
         spotify_playlists = self.spotify.get_playlists(
             force_full_sync, include_followed=include_followed_spotify
@@ -1544,50 +1440,9 @@ class MusicSynchronizer:
 
         self._sync_spotify_playlists_to_yandex(spotify_playlists, yandex_playlists)
 
-        updated_yandex = self.yandex.get_playlists(force_full_sync)
-        self._record_playlist_snapshots("yandex", updated_yandex)
-        self._record_playlist_snapshots("spotify", spotify_playlists)
-        
-        # Update sync timestamps
-        self.db_manager.update_last_sync_time("yandex", current_time)
-        self.db_manager.update_last_sync_time("spotify", current_time)
 
-    def _store_favorite_albums(
-        self, service: str, albums: Sequence[FavoriteAlbum]
-    ) -> None:
-        ids: List[str] = []
-        for album in albums:
-            if not album.album_id:
-                continue
-            ids.append(album.album_id)
-            self.db_manager.upsert_favorite_album(
-                service,
-                album.album_id,
-                album.name,
-                album.artist,
-                album.last_seen,
-            )
-        self.db_manager.remove_favorite_albums_not_in(service, ids)
-
-    def _store_favorite_artists(
-        self, service: str, artists: Sequence[FavoriteArtist]
-    ) -> None:
-        ids: List[str] = []
-        for artist in artists:
-            if not artist.artist_id:
-                continue
-            ids.append(artist.artist_id)
-            self.db_manager.upsert_favorite_artist(
-                service,
-                artist.artist_id,
-                artist.name,
-                artist.last_seen,
-            )
-        self.db_manager.remove_favorite_artists_not_in(service, ids)
 
     def sync_favorite_albums(self, readonly: bool, target: str) -> None:
-        current_time = _now_utc()
-        
         yandex_albums = self.yandex.get_favorite_albums()
         spotify_albums = self.spotify.get_favorite_albums()
 
@@ -1597,24 +1452,12 @@ class MusicSynchronizer:
             len(spotify_albums),
         )
 
-        self._store_favorite_albums("yandex", yandex_albums)
-        self._store_favorite_albums("spotify", spotify_albums)
-
         diff = match_entities(
             yandex_albums,
             spotify_albums,
             album_key,
             album_key,
         )
-
-        for yandex_album, spotify_album in diff.matched_pairs:
-            normalized = album_key(yandex_album)
-            if yandex_album.album_id and spotify_album.album_id:
-                self.db_manager.link_album_ids(
-                    yandex_album.album_id,
-                    spotify_album.album_id,
-                    normalized if normalized else None,
-                )
 
         if readonly:
             logger.info("Режим только записи снимков включен, изменения в сервисах не применяются")
@@ -1627,13 +1470,7 @@ class MusicSynchronizer:
                     album.artist,
                     album.name,
                 )
-                added = self.spotify.ensure_album_in_library(album)
-                if added and album.album_id and added.album_id:
-                    self.db_manager.link_album_ids(
-                        album.album_id,
-                        added.album_id,
-                        album_key(album),
-                    )
+                self.spotify.ensure_album_in_library(album)
 
         if target in {"both", "yandex"}:
             for album in diff.right_only:
@@ -1642,21 +1479,9 @@ class MusicSynchronizer:
                     album.artist,
                     album.name,
                 )
-                added = self.yandex.ensure_album_in_library(album)
-                if added and album.album_id and added.album_id:
-                    self.db_manager.link_album_ids(
-                        added.album_id,
-                        album.album_id,
-                        album_key(album),
-                    )
-        
-        # Update sync timestamps
-        self.db_manager.update_last_sync_time("yandex", current_time)
-        self.db_manager.update_last_sync_time("spotify", current_time)
+                self.yandex.ensure_album_in_library(album)
 
     def sync_favorite_artists(self, readonly: bool, target: str) -> None:
-        current_time = _now_utc()
-        
         yandex_artists = self.yandex.get_favorite_artists()
         spotify_artists = self.spotify.get_favorite_artists()
 
@@ -1666,24 +1491,12 @@ class MusicSynchronizer:
             len(spotify_artists),
         )
 
-        self._store_favorite_artists("yandex", yandex_artists)
-        self._store_favorite_artists("spotify", spotify_artists)
-
         diff = match_entities(
             yandex_artists,
             spotify_artists,
             artist_key,
             artist_key,
         )
-
-        for yandex_artist, spotify_artist in diff.matched_pairs:
-            normalized = artist_key(yandex_artist)
-            if yandex_artist.artist_id and spotify_artist.artist_id:
-                self.db_manager.link_artist_ids(
-                    yandex_artist.artist_id,
-                    spotify_artist.artist_id,
-                    normalized if normalized else None,
-                )
 
         if readonly:
             logger.info("Режим только записи снимков включен, изменения в сервисах не применяются")
@@ -1692,28 +1505,12 @@ class MusicSynchronizer:
         if target in {"both", "spotify"}:
             for artist in diff.left_only:
                 logger.info("Добавление исполнителя в Spotify: %s", artist.name)
-                added = self.spotify.ensure_artist_followed(artist)
-                if added and artist.artist_id and added.artist_id:
-                    self.db_manager.link_artist_ids(
-                        artist.artist_id,
-                        added.artist_id,
-                        artist_key(artist),
-                    )
+                self.spotify.ensure_artist_followed(artist)
 
         if target in {"both", "yandex"}:
             for artist in diff.right_only:
                 logger.info("Добавление исполнителя в Yandex: %s", artist.name)
-                added = self.yandex.ensure_artist_followed(artist)
-                if added and artist.artist_id and added.artist_id:
-                    self.db_manager.link_artist_ids(
-                        added.artist_id,
-                        artist.artist_id,
-                        artist_key(artist),
-                    )
-        
-        # Update sync timestamps
-        self.db_manager.update_last_sync_time("yandex", current_time)
-        self.db_manager.update_last_sync_time("spotify", current_time)
+                self.yandex.ensure_artist_followed(artist)
 
 
 def parse_arguments():
@@ -1794,10 +1591,9 @@ def main():
     # Параметры подключения к PostgreSQL
     db_path = os.getenv("DATABASE_PATH", "spondex.db")
 
-    db_manager = DatabaseManager(db_path)
-    yandex_service = YandexMusic(db_manager, yandex_token)
-    spotify_service = SpotifyMusic(db_manager)
-    synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
+    yandex_service = YandexMusic(yandex_token)
+    spotify_service = SpotifyMusic()
+    synchronizer = MusicSynchronizer(yandex_service, spotify_service)
 
     # Start web server in background thread for Docker environment
     web_thread = None
@@ -1861,8 +1657,6 @@ def main():
                 time.sleep(60)
     except KeyboardInterrupt:
         logger.info("Процесс синхронизации прерван пользователем")
-    finally:
-        db_manager.close()
 
 
 if __name__ == "__main__":
