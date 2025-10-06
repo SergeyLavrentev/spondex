@@ -19,7 +19,7 @@ from yandex_music.exceptions import YandexMusicError
 from base_class import MusicService
 from database_manager import DatabaseManager
 from models import FavoriteAlbum, FavoriteArtist, PlaylistSnapshot, PlaylistTrack
-from sync_helpers import album_key, artist_key, match_entities, normalize_text, track_key
+from sync_helpers import album_key, artist_key, match_entities, normalize_text
 
 from spotipy.exceptions import SpotifyException
 
@@ -309,12 +309,12 @@ class YandexMusic(MusicService):
 
         for track in tracks:
             full_track = track.fetch_track()
-            track_key = (full_track.title.lower(), full_track.artists[0].name.lower())
+            key = (full_track.title.lower(), full_track.artists[0].name.lower())
 
-            if track_key in tracks_seen:
+            if key in tracks_seen:
                 tracks_to_remove.append(track.track_id)
             else:
-                tracks_seen.add(track_key)
+                tracks_seen.add(key)
 
         if tracks_to_remove:
             self.client.users_likes_tracks_remove(tracks_to_remove)
@@ -1100,12 +1100,12 @@ class SpotifyMusic(MusicService):
 
             for item in results["items"]:
                 track = item["track"]
-                track_key = (track["name"].lower(), track["artists"][0]["name"].lower())
+                key = (track["name"].lower(), track["artists"][0]["name"].lower())
 
-                if track_key in tracks_seen:
+                if key in tracks_seen:
                     tracks_to_remove.append(track["id"])
                 else:
-                    tracks_seen.add(track_key)
+                    tracks_seen.add(key)
 
             offset += limit
 
