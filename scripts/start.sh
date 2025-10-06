@@ -2,6 +2,14 @@
 
 cd "$(dirname "$0")/.."
 
+if [ "$1" = "sync" ]; then
+    # Запуск синхронизации без перезапуска контейнера
+    shift
+    echo "Запуск синхронизации в запущенном контейнере..."
+    docker compose exec app python src/main.py "$@"
+    exit $?
+fi
+
 if [ ! -f .env ]; then
     echo "Ошибка: Файл .env не найден!"
     echo "Создайте файл .env на основе .env.example"
@@ -38,4 +46,6 @@ else
 fi
 
 echo "Приложение запущено в фоновом режиме."
-echo "Для просмотра логов используйте: docker compose logs -f app" 
+echo "Для просмотра логов используйте: docker compose logs -f app"
+echo "Для запуска синхронизации без перезапуска: docker compose exec app python src/main.py --sync-playlists --sync-favorite-albums --sync-favorite-artists --force-full-sync"
+echo "Или используйте: ./scripts/sync.sh" 
