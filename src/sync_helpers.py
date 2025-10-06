@@ -30,7 +30,12 @@ def artist_key(artist: FavoriteArtist) -> str:
 
 
 def track_key(track: PlaylistTrack) -> str:
-    return "::".join(filter(None, (normalize_text(track.title), normalize_text(track.artist))))
+    title_norm = normalize_text(track.title)
+    artist_norm = normalize_text(track.artist or "")
+    # Split artists by comma, normalize each, sort, and join with space
+    artists = [normalize_text(a.strip()) for a in artist_norm.split(",") if a.strip()]
+    artist_sorted = " ".join(sorted(artists))
+    return "::".join(filter(None, (title_norm, artist_sorted)))
 
 
 @dataclass

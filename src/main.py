@@ -24,7 +24,7 @@ from sync_helpers import album_key, artist_key, match_entities, normalize_text, 
 from spotipy.exceptions import SpotifyException
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def _join_artist_names(artists: Optional[Iterable[Any]]) -> Optional[str]:
             filtered.append(stripped)
     if not filtered:
         return None
-    return ", ".join(filtered)
+    return ", ".join(sorted(filtered))
 
 
 def check_and_fix_spotify_cache():
@@ -1505,6 +1505,11 @@ class MusicSynchronizer:
 
             # Create set of existing track keys for fast lookup
             yandex_track_keys = {track_key(track) for track in yandex_tracks}
+            logger.debug(
+                "Ключи существующих треков в Yandex плейлисте '%s': %s",
+                playlist.name,
+                sorted(yandex_track_keys),
+            )
 
             additions = 0
             for spotify_track in playlist.tracks:
@@ -1513,8 +1518,23 @@ class MusicSynchronizer:
 
                 # Check if track already exists in Yandex playlist
                 spotify_track_key = track_key(spotify_track)
+                logger.info(
+                    "Проверяем трек '%s' - '%s', ключ: '%s'",
+                    spotify_track.title,
+                    spotify_track.artist,
+                    spotify_track_key,
+                )
                 if spotify_track_key in yandex_track_keys:
+                    logger.info(
+                        "Трек уже существует в плейлисте '%s', пропускаем",
+                        playlist.name,
+                    )
                     continue
+
+                logger.info(
+                    "Трек не найден в плейлисте '%s', добавляем",
+                    playlist.name,
+                )
 
                 resolved = self.yandex.resolve_track_for_playlist(
                     spotify_track.track_id,
@@ -1552,6 +1572,12 @@ class MusicSynchronizer:
                     yandex_playlist = updated_playlist
                     # Refresh track key set so repeated tracks in Spotify list won't be re-added
                     yandex_track_keys.add(spotify_track_key)
+                    logger.info(
+                        "Добавлен трек '%s' - '%s' в плейлист '%s'",
+                        spotify_track.title,
+                        spotify_track.artist,
+                        playlist.name,
+                    )
                 additions += 1
 
             if additions:
