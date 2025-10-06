@@ -1806,6 +1806,11 @@ def parse_arguments():
         default="yandex",
         help="Select which platform receives missing favorites when syncing",
     )
+    parser.add_argument(
+        "--skip-web-server",
+        action="store_true",
+        help="Disable embedded web server (useful for one-off sync runs)",
+    )
     return parser.parse_args()
 
 def main():
@@ -1836,11 +1841,22 @@ def main():
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)
 
     # Start web server in background thread for Docker environment
-    import threading
-    app._start_time = time.time()
-    web_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8888, debug=False, use_reloader=False), daemon=True)
-    web_thread.start()
-    logger.info("Веб-сервер запущен на порту 8888")
+    web_thread = None
+    if not args.skip_web_server:
+        import threading
+
+        app._start_time = time.time()
+        web_thread = threading.Thread(
+            target=lambda: app.run(
+                host='0.0.0.0',
+                port=8888,
+                debug=False,
+                use_reloader=False,
+            ),
+            daemon=True,
+        )
+        web_thread.start()
+        logger.info("Веб-сервер запущен на порту 8888")
 
     try:
         first_run = True

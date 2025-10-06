@@ -6,7 +6,7 @@ if [ "$1" = "sync" ]; then
     # Запуск синхронизации без перезапуска контейнера
     shift
     echo "Запуск синхронизации в запущенном контейнере..."
-    docker compose exec app python src/main.py "$@"
+    docker compose exec app python src/main.py --skip-web-server "$@"
     exit $?
 fi
 
@@ -47,5 +47,5 @@ fi
 
 echo "Приложение запущено в фоновом режиме."
 echo "Для просмотра логов используйте: docker compose logs -f app"
-echo "Для запуска синхронизации без перезапуска: docker compose exec app python src/main.py --sync-playlists --sync-favorite-albums --sync-favorite-artists --force-full-sync"
+echo "Для запуска синхронизации без перезапуска: docker compose exec app python src/main.py --skip-web-server --sync-playlists --sync-favorite-albums --sync-favorite-artists --force-full-sync"
 echo "Или используйте: ./scripts/sync.sh" 

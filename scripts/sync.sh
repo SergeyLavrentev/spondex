@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 
 echo "Запуск полной синхронизации в запущенном контейнере..."
 docker compose exec app python src/main.py \
+    --skip-web-server \
     --sync-playlists \
     --sync-favorite-albums \
     --sync-favorite-artists \
