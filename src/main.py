@@ -1541,6 +1541,15 @@ class MusicSynchronizer:
                     spotify_track.title,
                     spotify_track.artist,
                 )
+                if resolved:
+                    track_part, album_part, composite = resolved
+                    logger.debug(
+                        "Найден трек для добавления в плейлист '%s': id=%s, title='%s', artists='%s'",
+                        playlist.name,
+                        getattr(composite, 'id', 'None'),
+                        getattr(composite, 'title', 'None'),
+                        getattr(composite, 'artists', 'None'),
+                    )
                 if not resolved:
                     logger.warning(
                         "Пропускаю трек при синхронизации плейлиста '%s': %s — %s",
