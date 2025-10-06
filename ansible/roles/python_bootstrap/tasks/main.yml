@@ -63,22 +63,18 @@
   register: python_target_stat
   changed_when: false
 
-- name: Configure python3 alternative for Python {{ python_major_minor }}
-  ansible.builtin.alternatives:
-    name: python3
-    link: /usr/bin/python3
-    path: "{{ python_binary_path }}"
-    priority: "{{ python_alternatives_priority }}"
-    state: present
+- name: Link python3 to Python {{ python_major_minor }}
+  ansible.builtin.file:
+    src: "{{ python_binary_path }}"
+    dest: /usr/bin/python3
+    state: link
   when: python_target_stat.stat.exists
 
-- name: Configure python alternative for Python {{ python_major_minor }}
-  ansible.builtin.alternatives:
-    name: python
-    link: /usr/bin/python
-    path: "{{ python_binary_path }}"
-    priority: "{{ python_alternatives_priority }}"
-    state: present
+- name: Link python to Python {{ python_major_minor }}
+  ansible.builtin.file:
+    src: "{{ python_binary_path }}"
+    dest: /usr/bin/python
+    state: link
   when: python_target_stat.stat.exists
 
 - name: Reset connection to use Python {{ python_major_minor }}
