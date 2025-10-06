@@ -34,6 +34,11 @@ monitor_telegram_request_timeout: 10
 monitor_telegram_bot_token: ""
 monitor_telegram_auto_register: true
 monitor_telegram_subscriber_store: "{{ monitor_state_path | dirname }}/telegram_subscribers.json"
+monitor_mail_enabled: false
+monitor_mail_to: []
+monitor_mail_from: "monitor@spondex.local"
+monitor_mail_subject: "[Spondex Monitor]"
+monitor_mail_cc: []
 monitor_timer_interval: 1m
 monitor_overwrite_config: false
 monitor_uv_version: "0.4.10"
