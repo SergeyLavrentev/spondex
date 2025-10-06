@@ -4,7 +4,6 @@ import math
 import os
 import re
 import shutil
-import socket
 import subprocess
 import sys
 import time
@@ -159,60 +158,6 @@ def check_app_containers(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
         if not running:
             label = check.display_name or check.container_name
             alerts.append(Alert(name=f"container_{label}_down", message=f"Container {label} is not running"))
-    return metrics, alerts
-
-
-def check_database_container(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
-    running = _check_container_running(ctx.config.db_check.container_name)
-    metrics = [Metric("db_container_status", _status(running), ctx.now)]
-    alerts: List[Alert] = []
-    if not running:
-        alerts.append(Alert("db_container_down", f"Database container {ctx.config.db_check.container_name} is not running"))
-    return metrics, alerts
-
-
-def check_database_port(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
-    alerts: List[Alert] = []
-    try:
-        with socket.create_connection((ctx.config.db_check.host, ctx.config.db_check.port), timeout=3):
-            success = True
-    except OSError as exc:
-        success = False
-        alerts.append(Alert("db_port_unavailable", f"Cannot connect to DB port: {exc}"))
-    metrics = [Metric("db_port_status", _status(success), ctx.now)]
-    return metrics, alerts
-
-
-def check_database_query(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
-    alerts: List[Alert] = []
-    password = None
-    if ctx.config.db_check.password_env_var:
-        password = os.environ.get(ctx.config.db_check.password_env_var)
-    command = [
-        "docker",
-        "exec",
-        ctx.config.db_check.container_name,
-        "psql",
-        "-U",
-        ctx.config.db_check.user,
-        "-d",
-        ctx.config.db_check.database,
-        "-tAc",
-        "SELECT 1",
-    ]
-    env = os.environ.copy()
-    if password:
-        env["PGPASSWORD"] = password
-    start = time.monotonic()
-    proc = subprocess.run(command, capture_output=True, text=True, timeout=15, env=env, check=False)
-    elapsed = time.monotonic() - start
-    latency_ms = int(round(elapsed * 1000))
-    metrics = [
-        Metric.from_value("db_query_latency_ms", latency_ms, ctx.now),
-        Metric("db_query_status", _status(proc.returncode == 0 and proc.stdout.strip() == "1"), ctx.now),
-    ]
-    if proc.returncode != 0 or proc.stdout.strip() != "1":
-        alerts.append(Alert("db_query_failed", f"SELECT 1 failed: rc={proc.returncode}, stdout={proc.stdout.strip()}, stderr={proc.stderr.strip()}"))
     return metrics, alerts
 
 
@@ -521,160 +466,18 @@ def check_yandex_api_availability(ctx: CheckContext) -> tuple[List[Metric], List
     return metrics, alerts
 
 
-def check_sync_status(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
-    """Check sync status and age for both services."""
-    alerts: List[Alert] = []
-    metrics: List[Metric] = []
-    
-    try:
-        # Import database manager
-        from database_manager import DatabaseManager
-        
-        # Get database connection parameters from environment
-        db_params = {
-            "dbname": os.environ.get("POSTGRES_DB", "music_sync"),
-            "user": os.environ.get("POSTGRES_USER"),
-            "password": os.environ.get("POSTGRES_PASSWORD"),
-            "host": os.environ.get("POSTGRES_HOST", "localhost"),
-            "port": int(os.environ.get("POSTGRES_PORT", "5432"))
-        }
-        
-        # Connect to database
-        db_manager = DatabaseManager(db_params)
-        
-        # Check last sync times for both services
-        services = ["yandex", "spotify"]
-        for service in services:
-            last_sync = db_manager.get_last_sync_time(service)
-            
-            if last_sync:
-                # Calculate age in hours
-                age_hours = (ctx.now - last_sync).total_seconds() / 3600
-                metrics.append(Metric.from_value(f"sync_last_{service}_hours_ago", int(age_hours), ctx.now))
-                
-                # Check if sync is too old (more than 24 hours)
-                if age_hours > 24:
-                    alerts.append(Alert(
-                        f"sync_{service}_stale", 
-                        f"{service.capitalize()} sync is {age_hours:.1f} hours old (last: {last_sync.strftime('%Y-%m-%d %H:%M %Z')})",
-                        severity="warning"
-                    ))
-                elif age_hours > 48:  # Critical if more than 2 days
-                    alerts.append(Alert(
-                        f"sync_{service}_very_stale", 
-                        f"{service.capitalize()} sync is {age_hours:.1f} hours old (last: {last_sync.strftime('%Y-%m-%d %H:%M %Z')})"
-                    ))
-            else:
-                # No sync history found
-                alerts.append(Alert(
-                    f"sync_{service}_never", 
-                    f"No sync history found for {service}"
-                ))
-                metrics.append(Metric(f"sync_last_{service}_hours_ago", -1, ctx.now))
-        
-        # Close database connection
-        db_manager.close()
-        
-    except Exception as e:
-        alerts.append(Alert(
-            "sync_status_check_error", 
-            f"Error checking sync status: {e}"
-        ))
-    
-    return metrics, alerts
-
-
-def check_playlist_counts(ctx: CheckContext) -> tuple[List[Metric], List[Alert]]:
-    """Check playlist and track counts for both services."""
-    alerts: List[Alert] = []
-    metrics: List[Metric] = []
-    
-    try:
-        # Import database manager
-        from database_manager import DatabaseManager
-        
-        # Get database connection parameters from environment
-        db_params = {
-            "dbname": os.environ.get("POSTGRES_DB", "music_sync"),
-            "user": os.environ.get("POSTGRES_USER"),
-            "password": os.environ.get("POSTGRES_PASSWORD"),
-            "host": os.environ.get("POSTGRES_HOST", "localhost"),
-            "port": int(os.environ.get("POSTGRES_PORT", "5432"))
-        }
-        
-        # Connect to database
-        db_manager = DatabaseManager(db_params)
-        
-        # Get playlist counts
-        services = ["yandex", "spotify"]
-        for service in services:
-            try:
-                # Get playlists count
-                db_manager.cursor.execute(
-                    "SELECT COUNT(*) as count FROM playlists WHERE service = %s",
-                    (service,)
-                )
-                result = db_manager.cursor.fetchone()
-                playlist_count = result["count"] if result else 0
-                metrics.append(Metric.from_value(f"playlists_{service}_count", playlist_count, ctx.now))
-                
-                # Get total tracks count
-                db_manager.cursor.execute(
-                    """
-                    SELECT COUNT(*) as count 
-                    FROM playlist_tracks pt 
-                    JOIN playlists p ON pt.playlist_pk = p.id 
-                    WHERE p.service = %s
-                    """,
-                    (service,)
-                )
-                result = db_manager.cursor.fetchone()
-                track_count = result["count"] if result else 0
-                metrics.append(Metric.from_value(f"tracks_{service}_count", track_count, ctx.now))
-                
-                # Check for empty playlists (potential issues)
-                if playlist_count == 0:
-                    alerts.append(Alert(
-                        f"playlists_{service}_empty", 
-                        f"No playlists found for {service} service",
-                        severity="warning"
-                    ))
-                
-            except Exception as e:
-                alerts.append(Alert(
-                    f"playlist_count_{service}_error", 
-                    f"Error getting playlist count for {service}: {e}"
-                ))
-        
-        # Close database connection
-        db_manager.close()
-        
-    except Exception as e:
-        alerts.append(Alert(
-            "playlist_count_check_error", 
-            f"Error checking playlist counts: {e}"
-        ))
-    
-    return metrics, alerts
-
-
 ALL_CHECKS = [
     check_load,
     check_memory,
     check_oom,
     check_docker_daemon,
     check_app_containers,
-    check_database_container,
-    check_database_port,
-    check_database_query,
     check_app_status,
     check_reboot,
     check_disk_iops,
     check_disk_usage,
     check_logs,
     check_yandex_api_availability,
-    check_sync_status,
-    check_playlist_counts,
 ]
 
 

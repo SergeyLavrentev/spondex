@@ -24,14 +24,6 @@ log_checks:
     pattern: Traceback
   - path: /var/log/syslog
     pattern: Out of memory
-  
-db_check:
-  container_name: spondex-postgres-1
-  host: 127.0.0.1
-  port: 5432
-  user: postgres
-  database: music_sync
-  password_env_var: SPONDEX_DB_PASSWORD
 
 disk_devices:
   - name: nvme0n1

@@ -14,7 +14,6 @@ memory_threshold: {{ monitor_memory_threshold }}
 docker_service: {{ monitor_docker_service }}
 compose_file: {{ app_root }}/docker-compose.prod.yml
 
-app_checks:
 {% if monitor_app_containers %}
 {% for item in monitor_app_containers %}
   - container: {{ item.name }}
@@ -24,14 +23,6 @@ app_checks:
   - container: spondex-app-1
     name: app
 {% endif %}
-
-db_check:
-  container_name: {{ monitor_db_container }}
-  host: {{ monitor_db_host }}
-  port: {{ monitor_db_port }}
-  user: {{ monitor_db_user }}
-  database: {{ monitor_db_name }}
-  password_env_var: POSTGRES_PASSWORD
 
 log_checks:
 {% if monitor_log_files %}

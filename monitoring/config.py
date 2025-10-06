@@ -30,16 +30,6 @@ class DockerCheck:
 
 
 @dataclass
-class DatabaseCheck:
-    container_name: str
-    host: str = "127.0.0.1"
-    port: int = 5432
-    user: str = "postgres"
-    database: str = "postgres"
-    password_env_var: Optional[str] = None
-
-
-@dataclass
 class DiskUsageCheck:
     name: str
     path: Path
@@ -81,7 +71,6 @@ class Config:
     docker_service_name: str = "docker"
     service_name: str = "Spondex"
     app_checks: List[DockerCheck] = field(default_factory=lambda: [DockerCheck("spondex-app-1", "app")])
-    db_check: DatabaseCheck = field(default_factory=lambda: DatabaseCheck(container_name="spondex-postgres-1"))
     log_checks: List[LogCheck] = field(default_factory=list)
     disk_devices: List[DiskDevice] = field(default_factory=list)
     disk_usage_checks: List[DiskUsageCheck] = field(default_factory=lambda: [DiskUsageCheck(name="root", path=Path("/"))])
@@ -186,7 +175,6 @@ def load_config(path: Optional[Path] = None) -> Config:
         docker_service_name=data.get("docker_service", "docker"),
         service_name=data.get("service_name", "Spondex"),
         app_checks=_coerce_docker_checks(data.get("app_checks", [])) or [DockerCheck("spondex-app-1", "app")],
-        db_check=DatabaseCheck(**data.get("db_check", {"container_name": "spondex-postgres-1"})),
         log_checks=_coerce_log_checks(data.get("log_checks", [])),
         disk_devices=_coerce_disk_devices(data.get("disk_devices", [])),
         disk_usage_checks=
@@ -202,4 +190,4 @@ def load_config(path: Optional[Path] = None) -> Config:
     return cfg
 
 
-__all__ = ["Config", "load_config", "DiskDevice", "DockerCheck", "DatabaseCheck", "DiskUsageCheck", "LogCheck", "NotificationConfig"]
+__all__ = ["Config", "load_config", "DiskDevice", "DockerCheck", "DiskUsageCheck", "LogCheck", "NotificationConfig"]

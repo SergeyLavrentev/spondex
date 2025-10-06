@@ -1,17 +1,6 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Ensure src directory is on sys.path for direct module imports
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
-import main  # noqa: E402
-import sync_helpers  # noqa: E402
-from models import FavoriteAlbum, FavoriteArtist  # noqa: E402
+from src import main, sync_helpers
+from src.models import FavoriteAlbum, FavoriteArtist
 
 
 @pytest.mark.parametrize(

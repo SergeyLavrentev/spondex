@@ -12,11 +12,6 @@ monitor_required_packages:
 monitor_app_containers:
   - name: spondex-app-1
     label: app
-monitor_db_container: spondex-postgres-1
-monitor_db_host: 127.0.0.1
-monitor_db_port: 5432
-monitor_db_user: postgres
-monitor_db_name: music_sync
 monitor_log_files:
   - path: /opt/spondex/logs/app.log
     pattern: Traceback

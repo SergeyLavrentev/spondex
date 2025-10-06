@@ -349,14 +349,6 @@ class YandexMusic(MusicService):
         except YandexMusicError:
             pass
 
-        if spotify_track_id:
-            self.db_manager.insert_or_update_track(
-                track_part,
-                spotify_track_id,
-                artist,
-                title,
-            )
-
         return track_part, album_part, composite
 
     def fetch_playlist(self, playlist_id: str) -> Optional[Any]:
@@ -1439,7 +1431,7 @@ class MusicSynchronizer:
         )
 
         if readonly:
-            logger.info("Режим только записи снимков включен, изменения в сервисах не применяются")
+            logger.info("Режим только анализа включен, изменения в сервисах не применяются")
             return
 
         if target in {"both", "spotify"}:
@@ -1478,7 +1470,7 @@ class MusicSynchronizer:
         )
 
         if readonly:
-            logger.info("Режим только записи снимков включен, изменения в сервисах не применяются")
+            logger.info("Режим только анализа включен, изменения в сервисах не применяются")
             return
 
         if target in {"both", "spotify"}:
@@ -1519,12 +1511,12 @@ def parse_arguments():
     parser.add_argument(
         "--sync-playlists",
         action="store_true",
-        help="Collect playlists from both services and store snapshots in the database",
+        help="Collect playlists from both services and mirror Spotify плейлисты в Yandex",
     )
     parser.add_argument(
         "--include-followed-playlists",
         action="store_true",
-        help="Include followed Spotify playlists when syncing playlist snapshots",
+        help="Include followed Spotify playlists when syncing playlist libraries",
     )
     parser.add_argument(
         "--sync-favorite-albums",
@@ -1539,7 +1531,7 @@ def parse_arguments():
     parser.add_argument(
         "--favorite-sync-readonly",
         action="store_true",
-        help="Only record favorite snapshots without modifying Spotify or Yandex libraries",
+        help="Dry-run mode for favorites: log differences without modifying Spotify or Yandex libraries",
     )
     parser.add_argument(
         "--favorite-sync-target",
@@ -1566,9 +1558,6 @@ def main():
     if not yandex_token:
         logger.error("YANDEX_TOKEN не найден в файле .env")
         return
-
-    # Параметры подключения к PostgreSQL
-    db_path = os.getenv("DATABASE_PATH", "spondex.db")
 
     yandex_service = YandexMusic(yandex_token)
     spotify_service = SpotifyMusic()

@@ -27,10 +27,9 @@
       ansible.builtin.set_fact:
         compose_services: "{{ compose_ps_raw.stdout_lines | map('from_json') | list }}"
 
-    - name: Extract app and postgres service entries
+    - name: Extract app service entries
       ansible.builtin.set_fact:
         app_service_entries: "{{ compose_services | selectattr('Service', 'equalto', 'app') | list }}"
-        postgres_service_entries: "{{ compose_services | selectattr('Service', 'equalto', 'postgres') | list }}"
 
     - name: Assert application container is running
       ansible.builtin.assert:
@@ -39,13 +38,6 @@
           - app_service_entries[0].State == 'running'
         fail_msg: "Application container is not running: {{ app_service_entries | default([]) }}"
 
-    - name: Assert database container is healthy
-      ansible.builtin.assert:
-        that:
-          - postgres_service_entries | length > 0
-          - postgres_service_entries[0].State == 'running'
-          - ('healthy' in (postgres_service_entries[0].get('Health', '') | lower)) or ('healthy' in (postgres_service_entries[0].get('Status', '') | lower))
-        fail_msg: "Postgres container is not healthy: {{ postgres_service_entries | default([]) }}"
 
     - name: Check monitoring timer active state
       ansible.builtin.command:

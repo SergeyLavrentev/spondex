@@ -21,7 +21,3 @@ services:
       - "300"
 
 
-volumes:
-  postgres_data:
-    name: spondex_postgres_data
-

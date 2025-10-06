@@ -5,7 +5,6 @@
 
 state_path: {{ monitor_state_path }}
 retention_days: {{ monitor_retention_days }}
-service_name: {{ monitor_service_name }}
 
 # --- Thresholds ------------------------------------------------------------
 load_window_minutes: {{ monitor_load_window_minutes }}
@@ -15,7 +14,6 @@ memory_threshold: {{ monitor_memory_threshold }}
 docker_service: {{ monitor_docker_service }}
 compose_file: {{ app_root }}/docker-compose.prod.yml
 
-app_checks:
 {% if monitor_app_containers %}
 {% for item in monitor_app_containers %}
   - container: {{ item.name }}
@@ -25,14 +23,6 @@ app_checks:
   - container: spondex-app-1
     name: app
 {% endif %}
-
-db_check:
-  container_name: {{ monitor_db_container }}
-  host: {{ monitor_db_host }}
-  port: {{ monitor_db_port }}
-  user: {{ monitor_db_user }}
-  database: {{ monitor_db_name }}
-  password_env_var: POSTGRES_PASSWORD
 
 log_checks:
 {% if monitor_log_files %}
@@ -89,7 +79,25 @@ notification:
       []
 {% endif %}
     bot_token_env: {{ monitor_telegram_bot_token_env | to_json }}
-    subscriber_store: {{ monitor_telegram_subscriber_store | to_json }}
-    poll_updates: {{ monitor_telegram_auto_register | bool | string | lower }}
     api_base: {{ monitor_telegram_api_base | to_json }}
     request_timeout: {{ monitor_telegram_request_timeout }}
+  mail:
+    enabled: {{ monitor_mail_enabled | bool | string | lower }}
+    recipients:
+{% if monitor_mail_to | default([]) | length > 0 %}
+{% for recipient in monitor_mail_to %}
+      - {{ recipient | to_json }}
+{% endfor %}
+{% else %}
+      - "root@localhost"
+{% endif %}
+    sender: {{ monitor_mail_from | to_json }}
+    subject_prefix: {{ monitor_mail_subject | to_json }}
+    cc:
+{% if monitor_mail_cc | default([]) | length > 0 %}
+{% for cc in monitor_mail_cc %}
+      - {{ cc | to_json }}
+{% endfor %}
+{% else %}
+      []
+{% endif %}

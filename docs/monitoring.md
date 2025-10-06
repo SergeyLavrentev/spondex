@@ -30,11 +30,12 @@ Key checks implemented:
   `active`.
 - **Application containers**: ensures configured containers (default:
   `spondex-app-1`) are running.
-- **Database container & port**: checks Docker state, confirms that port 5432 is
-  open on `127.0.0.1`, and executes `SELECT 1` inside the Postgres container.
 - **Application /status endpoint**: queries the application's health check API
   at `http://127.0.0.1:8888/status`, validates JSON response structure, and
   alerts on HTTP errors, unhealthy status, or malformed responses.
+- **Status latency & uptime**: records latency and HTTP codes from `/status`,
+  validates required fields, and stores uptime metrics when exposed by the
+  service.
 - **Application logs**: tails configured log files and looks for `Traceback` (or
   custom patterns). Offsets are persisted to survive rotations.
 - **Server reboots**: compares the current boot timestamp with the stored value
@@ -46,6 +47,8 @@ Key checks implemented:
   points, raises warnings when the warn threshold is exceeded, and escalates to
   a critical alert when the remaining space drops below the configured
   minimum.
+- **Yandex Music API**: connects using `YANDEX_TOKEN`, measures response latency,
+  and raises alerts on auth failures, import errors, or service downtime.
 
 All metrics and state variables (log offsets, disk stats snapshot, last boot
 stamp, etc.) are stored under the SQLite database declared in the configuration

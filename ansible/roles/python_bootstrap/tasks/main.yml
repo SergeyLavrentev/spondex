@@ -64,7 +64,7 @@
   changed_when: false
 
 - name: Configure python3 alternative for Python {{ python_major_minor }}
-  community.general.alternatives:
+  ansible.builtin.alternatives:
     name: python3
     link: /usr/bin/python3
     path: "{{ python_binary_path }}"
@@ -73,7 +73,7 @@
   when: python_target_stat.stat.exists
 
 - name: Configure python alternative for Python {{ python_major_minor }}
-  community.general.alternatives:
+  ansible.builtin.alternatives:
     name: python
     link: /usr/bin/python
     path: "{{ python_binary_path }}"
