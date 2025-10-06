@@ -1258,8 +1258,6 @@ class MusicSynchronizer:
         force_full_sync: bool = False,
         target: str = "yandex",
     ):
-        current_time = _now_utc()
-
         if target in {"both", "spotify"}:
             logger.info("Синхронизация треков из Yandex в Spotify")
             yandex_tracks = self.yandex.get_tracks(force_full_sync)
