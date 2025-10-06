@@ -1483,21 +1483,25 @@ class MusicSynchronizer:
             tracks_attr = getattr(yandex_playlist, "tracks", []) or []
             for position, track_obj in enumerate(tracks_attr):
                 track_detail = getattr(track_obj, "track", None)
-                if track_detail:
-                    title = getattr(track_detail, "title", None)
-                    artists = getattr(track_detail, "artists", [])
-                    if artists and title:
-                        artist_name = getattr(artists[0], "name", None)
-                        track_id = getattr(track_obj, "track_id", None)
-                        if track_id and title and artist_name:
-                            yandex_tracks.append(PlaylistTrack(
-                                track_id=str(track_id),
-                                title=title,
-                                artist=artist_name,
-                                album_id=None,  # Not needed for matching
-                                position=position,
-                                added_at=None,  # Not needed for matching
-                            ))
+                if not track_detail:
+                    continue
+
+                title = getattr(track_detail, "title", None)
+                artists = getattr(track_detail, "artists", [])
+                artist_name = _join_artist_names(artists)
+                track_id = getattr(track_obj, "track_id", None)
+
+                if track_id and title and artist_name:
+                    yandex_tracks.append(
+                        PlaylistTrack(
+                            track_id=str(track_id),
+                            title=title,
+                            artist=artist_name,
+                            album_id=None,  # Not needed for matching
+                            position=position,
+                            added_at=None,  # Not needed for matching
+                        )
+                    )
 
             # Create set of existing track keys for fast lookup
             yandex_track_keys = {track_key(track) for track in yandex_tracks}
@@ -1508,7 +1512,8 @@ class MusicSynchronizer:
                     continue
 
                 # Check if track already exists in Yandex playlist
-                if track_key(spotify_track) in yandex_track_keys:
+                spotify_track_key = track_key(spotify_track)
+                if spotify_track_key in yandex_track_keys:
                     continue
 
                 resolved = self.yandex.resolve_track_for_playlist(
@@ -1545,6 +1550,8 @@ class MusicSynchronizer:
 
                 if updated_playlist:
                     yandex_playlist = updated_playlist
+                    # Refresh track key set so repeated tracks in Spotify list won't be re-added
+                    yandex_track_keys.add(spotify_track_key)
                 additions += 1
 
             if additions:
