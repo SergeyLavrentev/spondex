@@ -15,7 +15,7 @@ if [ ! -f .cache ]; then
 fi
 
 echo "Запуск приложения в Docker..."
-docker-compose down
+docker compose down
 
 if [ $# -gt 0 ]; then
     echo "Запуск с аргументами: $@"
@@ -30,12 +30,12 @@ if [ $# -gt 0 ]; then
     echo "  app:" >> docker-compose.override.yml
     echo "    command: $CMD" >> docker-compose.override.yml
     
-    docker-compose up -d
+    docker compose up -d
     
     rm docker-compose.override.yml
 else
-    docker-compose up -d
+    docker compose up -d
 fi
 
 echo "Приложение запущено в фоновом режиме."
-echo "Для просмотра логов используйте: docker-compose logs -f app" 
+echo "Для просмотра логов используйте: docker compose logs -f app" 
