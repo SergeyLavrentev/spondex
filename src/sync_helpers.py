@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar
 
-from models import FavoriteAlbum, FavoriteArtist
+from models import FavoriteAlbum, FavoriteArtist, PlaylistTrack
 
 _T = TypeVar("_T", FavoriteAlbum, FavoriteArtist)
 
@@ -27,6 +27,10 @@ def album_key(album: FavoriteAlbum) -> str:
 
 def artist_key(artist: FavoriteArtist) -> str:
     return normalize_text(artist.name)
+
+
+def track_key(track: PlaylistTrack) -> str:
+    return "::".join(filter(None, (normalize_text(track.title), normalize_text(track.artist))))
 
 
 @dataclass

@@ -19,7 +19,7 @@ from yandex_music.exceptions import YandexMusicError
 from base_class import MusicService
 from database_manager import DatabaseManager
 from models import FavoriteAlbum, FavoriteArtist, PlaylistSnapshot, PlaylistTrack
-from sync_helpers import album_key, artist_key, match_entities, normalize_text
+from sync_helpers import album_key, artist_key, match_entities, normalize_text, track_key
 
 from spotipy.exceptions import SpotifyException
 
@@ -1478,40 +1478,50 @@ class MusicSynchronizer:
                 )
                 continue
 
+            # Get current tracks from Yandex playlist
+            yandex_tracks: List[PlaylistTrack] = []
             tracks_attr = getattr(yandex_playlist, "tracks", []) or []
-            existing_tracks = set()
-            for track_obj in tracks_attr:
+            for position, track_obj in enumerate(tracks_attr):
                 track_detail = getattr(track_obj, "track", None)
                 if track_detail:
                     title = getattr(track_detail, "title", None)
                     artists = getattr(track_detail, "artists", [])
-                    if artists:
+                    if artists and title:
                         artist_name = getattr(artists[0], "name", None)
-                        if title and artist_name:
-                            existing_tracks.add((title.lower().strip(), artist_name.lower().strip()))
+                        track_id = getattr(track_obj, "track_id", None)
+                        if track_id and title and artist_name:
+                            yandex_tracks.append(PlaylistTrack(
+                                track_id=str(track_id),
+                                title=title,
+                                artist=artist_name,
+                                album_id=None,  # Not needed for matching
+                                position=position,
+                                added_at=None,  # Not needed for matching
+                            ))
+
+            # Create set of existing track keys for fast lookup
+            yandex_track_keys = {track_key(track) for track in yandex_tracks}
 
             additions = 0
-            for item in playlist.tracks:
-                if not item.track_id:
+            for spotify_track in playlist.tracks:
+                if not spotify_track.track_id:
                     continue
 
-                # Check if track already exists by title/artist
-                item_title = (item.title or "").lower().strip()
-                item_artist = (item.artist or "").lower().strip()
-                if (item_title, item_artist) in existing_tracks:
+                # Check if track already exists in Yandex playlist
+                if track_key(spotify_track) in yandex_track_keys:
                     continue
 
                 resolved = self.yandex.resolve_track_for_playlist(
-                    item.track_id,
-                    item.title,
-                    item.artist,
+                    spotify_track.track_id,
+                    spotify_track.title,
+                    spotify_track.artist,
                 )
                 if not resolved:
                     logger.warning(
                         "Пропускаю трек при синхронизации плейлиста '%s': %s — %s",
                         playlist.name,
-                        item.artist,
-                        item.title,
+                        spotify_track.artist,
+                        spotify_track.title,
                     )
                     continue
 
@@ -1526,8 +1536,8 @@ class MusicSynchronizer:
                 except Exception as exc:
                     logger.error(
                         "Ошибка добавления трека %s — %s в плейлист '%s': %s",
-                        item.artist,
-                        item.title,
+                        spotify_track.artist,
+                        spotify_track.title,
                         playlist.name,
                         exc,
                     )
@@ -1535,10 +1545,6 @@ class MusicSynchronizer:
 
                 if updated_playlist:
                     yandex_playlist = updated_playlist
-
-                # Update existing_tracks with the new track
-                if item_title and item_artist:
-                    existing_tracks.add((item_title, item_artist))
                 additions += 1
 
             if additions:
