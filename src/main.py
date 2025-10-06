@@ -155,16 +155,10 @@ def status():
         try:
             from database_manager import DatabaseManager
             
-            # Параметры подключения к PostgreSQL (как в основном коде)
-            db_params = {
-                "dbname": os.getenv("POSTGRES_DB", "music_sync"),
-                "user": os.getenv("POSTGRES_USER"),
-                "password": os.getenv("POSTGRES_PASSWORD"),
-                "host": os.getenv("POSTGRES_HOST", "localhost"),
-                "port": os.getenv("POSTGRES_PORT", "5432")
-            }
+            # Параметры подключения к SQLite
+            db_path = os.getenv("DATABASE_PATH", "spondex.db")
             
-            db_manager = DatabaseManager(db_params)
+            db_manager = DatabaseManager(db_path)
             # Simple query to check DB
             db_manager.cursor.execute("SELECT 1")
             health_checks["database"] = {
@@ -1798,15 +1792,9 @@ def main():
         return
 
     # Параметры подключения к PostgreSQL
-    db_params = {
-        "dbname": os.getenv("POSTGRES_DB", "music_sync"),
-        "user": os.getenv("POSTGRES_USER"),
-        "password": os.getenv("POSTGRES_PASSWORD"),
-        "host": os.getenv("POSTGRES_HOST", "localhost"),
-        "port": os.getenv("POSTGRES_PORT", "5432")
-    }
+    db_path = os.getenv("DATABASE_PATH", "spondex.db")
 
-    db_manager = DatabaseManager(db_params)
+    db_manager = DatabaseManager(db_path)
     yandex_service = YandexMusic(db_manager, yandex_token)
     spotify_service = SpotifyMusic(db_manager)
     synchronizer = MusicSynchronizer(yandex_service, spotify_service, db_manager)

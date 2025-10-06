@@ -1,14 +1,13 @@
 import datetime
+import sqlite3
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-
-import psycopg
-from psycopg.rows import dict_row
 
 
 class DatabaseManager:
-    def __init__(self, connection_params: dict):
-        self.conn = psycopg.connect(**connection_params)
-        self.cursor = self.conn.cursor(row_factory=dict_row)
+    def __init__(self, db_path: str = "spondex.db"):
+        self.conn = sqlite3.connect(db_path)
+        self.conn.row_factory = sqlite3.Row
+        self.cursor = self.conn.cursor()
         self._create_tables()
 
     def _create_tables(self):
@@ -17,32 +16,30 @@ class DatabaseManager:
 
     def get_last_sync_time(self, service: str) -> Optional[datetime.datetime]:
         self.cursor.execute(
-            "SELECT last_sync FROM sync_history WHERE service = %s",
+            "SELECT last_sync FROM sync_history WHERE service = ?",
             (service,)
         )
         result = self.cursor.fetchone()
-        return result["last_sync"] if result else None
+        if result and result["last_sync"]:
+            return datetime.datetime.fromisoformat(result["last_sync"])
+        return None
 
     def update_last_sync_time(self, service: str, sync_time: datetime.datetime):
         self.cursor.execute(
-            """
-            INSERT INTO sync_history (service, last_sync)
-            VALUES (%s, %s)
-            ON CONFLICT (service) DO UPDATE SET last_sync = EXCLUDED.last_sync
-            """,
-            (service, sync_time)
+            "INSERT OR REPLACE INTO sync_history (service, last_sync) VALUES (?, ?)",
+            (service, sync_time.isoformat())
         )
         self.conn.commit()
 
     def check_track_exists(self, service: str, track_id: str) -> bool:
         if service == "yandex":
             self.cursor.execute(
-                "SELECT 1 FROM tracks WHERE yandex_id = %s",
+                "SELECT 1 FROM tracks WHERE yandex_id = ?",
                 (track_id,)
             )
         else:
             self.cursor.execute(
-                "SELECT 1 FROM tracks WHERE spotify_id = %s",
+                "SELECT 1 FROM tracks WHERE spotify_id = ?",
                 (track_id,)
             )
         return bool(self.cursor.fetchone())
@@ -50,10 +47,8 @@ class DatabaseManager:
     def insert_or_update_track(self, yandex_id: str, spotify_id: str, artist: str, title: str):
         self.cursor.execute(
             """
-            INSERT INTO tracks (yandex_id, spotify_id, artist, title)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (yandex_id, spotify_id) DO UPDATE 
-            SET artist = EXCLUDED.artist, title = EXCLUDED.title
+            INSERT OR REPLACE INTO tracks (yandex_id, spotify_id, artist, title)
+            VALUES (?, ?, ?, ?)
             """,
             (yandex_id, spotify_id, artist, title)
         )
@@ -61,7 +56,7 @@ class DatabaseManager:
 
     def get_spotify_id(self, yandex_id: str) -> Optional[str]:
         self.cursor.execute(
-            "SELECT spotify_id FROM tracks WHERE yandex_id = %s",
+            "SELECT spotify_id FROM tracks WHERE yandex_id = ?",
             (yandex_id,),
         )
         result = self.cursor.fetchone()
@@ -69,7 +64,7 @@ class DatabaseManager:
 
     def get_yandex_id(self, spotify_id: str) -> Optional[str]:
         self.cursor.execute(
-            "SELECT yandex_id FROM tracks WHERE spotify_id = %s",
+            "SELECT yandex_id FROM tracks WHERE spotify_id = ?",
             (spotify_id,),
         )
         result = self.cursor.fetchone()
@@ -190,18 +185,24 @@ class DatabaseManager:
         name: Optional[str],
         owner: Optional[str],
     ) -> int:
+        # Check if exists
         self.cursor.execute(
-            """
-            INSERT INTO playlists (service, playlist_id, name, owner)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (service, playlist_id) DO UPDATE
-            SET name = EXCLUDED.name,
-                owner = EXCLUDED.owner
-            RETURNING id
-            """,
-            (service, playlist_id, name, owner),
+            "SELECT id FROM playlists WHERE service = ? AND playlist_id = ?",
+            (service, playlist_id),
         )
-        playlist_pk = self.cursor.fetchone()["id"]
+        row = self.cursor.fetchone()
+        if row:
+            playlist_pk = row["id"]
+            self.cursor.execute(
+                "UPDATE playlists SET name = ?, owner = ? WHERE id = ?",
+                (name, owner, playlist_pk),
+            )
+        else:
+            self.cursor.execute(
+                "INSERT INTO playlists (service, playlist_id, name, owner) VALUES (?, ?, ?, ?)",
+                (service, playlist_id, name, owner),
+            )
+            playlist_pk = self.cursor.lastrowid
         self.conn.commit()
         return playlist_pk
 
@@ -228,11 +229,12 @@ class DatabaseManager:
 
     def remove_playlists_not_in(self, service: str, playlist_ids: Sequence[str]) -> None:
         if not playlist_ids:
-            self.cursor.execute("DELETE FROM playlists WHERE service = %s", (service,))
+            self.cursor.execute("DELETE FROM playlists WHERE service = ?", (service,))
         else:
+            placeholders = ','.join('?' for _ in playlist_ids)
             self.cursor.execute(
-                "DELETE FROM playlists WHERE service = %s AND NOT (playlist_id = ANY(%s))",
-                (service, list(playlist_ids)),
+                f"DELETE FROM playlists WHERE service = ? AND playlist_id NOT IN ({placeholders})",
+                (service, *playlist_ids),
             )
         self.conn.commit()
 
@@ -243,18 +245,19 @@ class DatabaseManager:
         tracks: Iterable[Tuple[str, Optional[int], Optional[datetime.datetime]]],
     ) -> None:
         self.cursor.execute(
-            "DELETE FROM playlist_tracks WHERE playlist_pk = %s",
+            "DELETE FROM playlist_tracks WHERE playlist_pk = ?",
             (playlist_pk,),
         )
-        batch: List[Tuple[int, str, str, Optional[int], Optional[datetime.datetime]]] = []
+        batch: List[Tuple[int, str, str, Optional[int], Optional[str]]] = []
         for track_id, position, added_at in tracks:
-            batch.append((playlist_pk, service, track_id, position, added_at))
+            added_at_str = added_at.isoformat() if added_at else None
+            batch.append((playlist_pk, service, track_id, position, added_at_str))
 
         if batch:
             self.cursor.executemany(
                 """
                 INSERT INTO playlist_tracks (playlist_pk, service, track_id, position, added_at)
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 batch,
             )
@@ -297,11 +300,12 @@ class DatabaseManager:
 
     def remove_favorite_albums_not_in(self, service: str, album_ids: Sequence[str]) -> None:
         if not album_ids:
-            self.cursor.execute("DELETE FROM favorite_albums WHERE service = %s", (service,))
+            self.cursor.execute("DELETE FROM favorite_albums WHERE service = ?", (service,))
         else:
+            placeholders = ','.join('?' for _ in album_ids)
             self.cursor.execute(
-                "DELETE FROM favorite_albums WHERE service = %s AND NOT (album_id = ANY(%s))",
-                (service, list(album_ids)),
+                f"DELETE FROM favorite_albums WHERE service = ? AND album_id NOT IN ({placeholders})",
+                (service, *album_ids),
             )
         self.conn.commit()
 
