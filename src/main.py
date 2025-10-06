@@ -16,10 +16,9 @@ from spotipy.oauth2 import SpotifyOAuth
 from yandex_music import Client as YandexClient
 from yandex_music.exceptions import YandexMusicError
 
-from base_class import MusicService
-from database_manager import DatabaseManager
-from models import FavoriteAlbum, FavoriteArtist, PlaylistSnapshot, PlaylistTrack
-from sync_helpers import album_key, artist_key, match_entities, normalize_text
+from .base_class import MusicService
+from .models import FavoriteAlbum, FavoriteArtist, PlaylistSnapshot, PlaylistTrack
+from .sync_helpers import album_key, artist_key, match_entities, normalize_text
 
 from spotipy.exceptions import SpotifyException
 
@@ -150,26 +149,6 @@ def status():
             "status": "healthy",
             "details": {}
         }
-        
-        # Database check (simple connectivity)
-        try:
-            from database_manager import DatabaseManager
-            
-            # Параметры подключения к SQLite
-            db_path = os.getenv("DATABASE_PATH", "spondex.db")
-            
-            db_manager = DatabaseManager(db_path)
-            # Simple query to check DB
-            db_manager.cursor.execute("SELECT 1")
-            health_checks["database"] = {
-                "status": "healthy",
-                "details": {"connection": "ok"}
-            }
-        except Exception as e:
-            health_checks["database"] = {
-                "status": "unhealthy", 
-                "details": {"error": str(e)}
-            }
         
         # System metrics
         system_info = {

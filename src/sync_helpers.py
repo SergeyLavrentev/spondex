@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar
 
-from models import FavoriteAlbum, FavoriteArtist, PlaylistTrack
+from .models import FavoriteAlbum, FavoriteArtist, PlaylistTrack
 
 _T = TypeVar("_T", FavoriteAlbum, FavoriteArtist)
 

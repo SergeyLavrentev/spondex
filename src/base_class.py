@@ -1,10 +1,13 @@
-from typing import Iterable, List, Optional
-from database_manager import DatabaseManager
-from models import FavoriteAlbum, FavoriteArtist, PlaylistSnapshot
+from typing import Iterable, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .database_manager import DatabaseManager
+
+from .models import FavoriteAlbum, FavoriteArtist, PlaylistSnapshot
 
 
 class MusicService:
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+    def __init__(self, db_manager: Optional["DatabaseManager"] = None):
         self.db_manager = db_manager
 
     def get_tracks(self, force_full_sync: bool) -> List[dict]:
