@@ -19,10 +19,6 @@
     local_image_full: "{{ local_image_name }}:{{ local_image_tag }}"
     remote_image_archive: "/tmp/spondex-image.tar"
     deploy_image: "{{ local_image_full if not is_ci_environment else registry_image }}"
-    postgres_volume_name: "spondex_postgres_data"
-    postgres_db_name: "{{ postgres_db | default('music_sync') }}"
-    postgres_user_name: "{{ postgres_user | default('postgres') }}"
-    force_recreate_db_flag: "{{ force_recreate_db | default(false) | bool }}"
     python_major_minor: "3.13"
     python_binary_path: "/usr/bin/python{{ python_major_minor }}"
     python_apt_packages:
@@ -36,6 +32,5 @@
     - role: system_bootstrap
     - role: application_sync
     - role: container_deploy
-    - role: database_setup
     - role: post_runtime
     - role: monitoring
