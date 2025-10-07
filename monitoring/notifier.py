@@ -328,7 +328,7 @@ def _handle_status_command(config: Config, token: str, chat_id: str) -> None:
         now = datetime.now().astimezone()
         store = _open_state_store(config)
         ctx = CheckContext(config=config, store=store, now=now)
-        
+
         metrics, alerts = run_checks(ctx)
         
         # Format report
