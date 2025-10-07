@@ -400,13 +400,20 @@ class YandexMusic(MusicService):
         return fallback_candidate
 
     def add_track(self, track: dict) -> Optional[str]:
-        yandex_track = self.search_track(
-            track["track"]["artists"][0]["name"], track["track"]["name"]
+        artist_name = track["track"]["artists"][0]["name"]
+        title = track["track"]["name"]
+
+        resolved = self.resolve_track_for_playlist(
+            spotify_track_id=track["track"].get("id"),
+            title=title,
+            artist=artist_name,
         )
-        track_id = self._extract_track_id(yandex_track)
-        if track_id:
-            self.client.users_likes_tracks_add(track_id)
-            return track_id
+        if resolved:
+            track_part, album_part, composite = resolved
+            if composite:
+                return composite
+            if track_part and album_part:
+                return f"{track_part}:{album_part}"
         logger.warning(
             f"Track not found in Yandex: {track['track']['artists'][0]['name']} - {track['track']['name']}"
         )
