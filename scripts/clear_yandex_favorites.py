@@ -10,9 +10,35 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from pathlib import Path
 from typing import Iterable, List
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environments
+    def load_dotenv(path: str | os.PathLike[str] | None = None) -> None:
+        """Fallback implementation that reads key=value pairs from .env."""
+
+        candidate = Path(path) if path is not None else Path(".env")
+        if not candidate.exists():
+            logging.getLogger("clear_yandex_favorites").warning(
+                "python-dotenv not installed; proceeding without .env (file %s not found)",
+                candidate,
+            )
+            return
+
+        for raw_line in candidate.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
 from yandex_music import Client as YandexClient
 
 logger = logging.getLogger("clear_yandex_favorites")
