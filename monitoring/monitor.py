@@ -15,6 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 
+import logging
+
 from monitoring.checks import Alert, CheckContext, run_checks
 from monitoring.config import load_config
 from monitoring.notifier import poll_telegram_subscribers, send_notifications
@@ -40,6 +42,13 @@ def parse_args() -> argparse.Namespace:
         help="Poll Telegram updates to refresh subscribers and exit",
     )
     return parser.parse_args()
+
+
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
 
 
 def _format_metric_value(metric: Metric) -> str:
@@ -81,6 +90,7 @@ def format_report(now: datetime, alerts: List[Alert], metrics: List[Metric]) -> 
 
 def main() -> int:
     # Load environment variables from .env file
+    _configure_logging()
     load_dotenv()
     
     args = parse_args()
