@@ -21,6 +21,16 @@ if TYPE_CHECKING:  # pragma: no cover - import only for type hints
     from yandex_music import Client as YandexClient
 
 
+def _running_in_virtualenv() -> bool:
+    base_prefix = getattr(sys, "base_prefix", sys.prefix)
+    real_prefix = getattr(sys, "real_prefix", None)
+    return (
+        sys.prefix != base_prefix
+        or real_prefix is not None
+        or "VIRTUAL_ENV" in os.environ
+    )
+
+
 def _ensure_package(package: str, *, required: bool = True) -> bool:
     """Ensure package is importable; optionally install it via pip.
 
@@ -38,6 +48,13 @@ def _ensure_package(package: str, *, required: bool = True) -> bool:
     except Exception as exc:  # pragma: no cover - extremely rare env issues
         logger.debug("Unexpected import error for '%s': %s", package, exc)
         logger.warning("Attempting to (re)install '%s'...", package)
+
+    if not required and not _running_in_virtualenv():
+        logger.info(
+            "Skipping auto-install of optional package '%s' outside of a virtual environment.",
+            package,
+        )
+        return False
 
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", package])
@@ -91,6 +108,9 @@ def _load_dotenv(path: str | os.PathLike[str] | None = None) -> None:
             pass
 
     candidate = Path(path) if path is not None else Path(".env")
+    logging.getLogger("clear_yandex_favorites").info(
+        "Falling back to manual .env parsing at %s", candidate
+    )
     if not candidate.exists():
         logging.getLogger("clear_yandex_favorites").warning(
             "Unable to load .env file at %s", candidate
