@@ -22,20 +22,34 @@ if TYPE_CHECKING:  # pragma: no cover - import only for type hints
 
 
 def _ensure_package(package: str) -> None:
-    """Install missing package via pip if possible."""
-
-    spec = importlib.util.find_spec(package)
-    if spec is not None:
-        return
+    """Ensure that the given package is importable, installing it via pip if needed."""
 
     logger = logging.getLogger("clear_yandex_favorites")
-    logger.warning("Package '%s' not found. Attempting to install...", package)
+
+    try:
+        importlib.import_module(package)
+        return
+    except ModuleNotFoundError:
+        logger.warning("Package '%s' not found. Attempting to install...", package)
+    except Exception as exc:  # pragma: no cover - extremely rare env issues
+        logger.debug("Unexpected import error for '%s': %s", package, exc)
+        logger.warning("Attempting to (re)install '%s'...", package)
 
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", package])
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         logger.error(
             "Failed to install '%s'. Please install it manually and rerun the script: %s",
+            package,
+            exc,
+        )
+        raise SystemExit(1)
+
+    try:
+        importlib.import_module(package)
+    except ModuleNotFoundError as exc:  # pragma: no cover - indicates broken install
+        logger.error(
+            "Package '%s' is still unavailable after installation attempt: %s",
             package,
             exc,
         )
