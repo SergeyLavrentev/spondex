@@ -21,14 +21,18 @@ if TYPE_CHECKING:  # pragma: no cover - import only for type hints
     from yandex_music import Client as YandexClient
 
 
-def _ensure_package(package: str) -> None:
-    """Ensure that the given package is importable, installing it via pip if needed."""
+def _ensure_package(package: str, *, required: bool = True) -> bool:
+    """Ensure package is importable; optionally install it via pip.
+
+    Returns True if the package is available afterwards. If ``required`` is False,
+    failures will be logged but won't terminate the script.
+    """
 
     logger = logging.getLogger("clear_yandex_favorites")
 
     try:
         importlib.import_module(package)
-        return
+        return True
     except ModuleNotFoundError:
         logger.warning("Package '%s' not found. Attempting to install...", package)
     except Exception as exc:  # pragma: no cover - extremely rare env issues
@@ -38,39 +42,53 @@ def _ensure_package(package: str) -> None:
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", package])
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        logger.error(
-            "Failed to install '%s'. Please install it manually and rerun the script: %s",
-            package,
-            exc,
+        message = (
+            "Failed to install optional package '%s'; continuing without it: %s"
+            if not required
+            else "Failed to install '%s'. Please install it manually and rerun the script: %s"
         )
-        raise SystemExit(1)
+        log_method = logger.warning if not required else logger.error
+        log_method(message, package, exc)
+        if required:
+            raise SystemExit(1)
+        return False
 
     try:
         importlib.import_module(package)
+        return True
     except ModuleNotFoundError as exc:  # pragma: no cover - indicates broken install
-        logger.error(
-            "Package '%s' is still unavailable after installation attempt: %s",
-            package,
-            exc,
+        message = (
+            "Package '%s' remains unavailable after installation attempt; continuing without it: %s"
+            if not required
+            else "Package '%s' is still unavailable after installation attempt: %s"
         )
-        raise SystemExit(1)
+        log_method = logger.warning if not required else logger.error
+        log_method(message, package, exc)
+        if required:
+            raise SystemExit(1)
+        return False
 
 
 def _load_dotenv(path: str | os.PathLike[str] | None = None) -> None:
+    _real_load_dotenv = None
+
     try:
         from dotenv import load_dotenv as _real_load_dotenv  # type: ignore
-
-        _real_load_dotenv(path)
-        return
     except ModuleNotFoundError:
-        _ensure_package("python-dotenv")
-        from dotenv import load_dotenv as _real_load_dotenv  # type: ignore
+        if _ensure_package("python-dotenv", required=False):
+            try:
+                from dotenv import load_dotenv as _real_load_dotenv  # type: ignore
+            except Exception:  # pragma: no cover - exotic import issues
+                _real_load_dotenv = None
+    except Exception:  # pragma: no cover - exotic import issues
+        _real_load_dotenv = None
 
-        _real_load_dotenv(path)
-        return
-    except Exception:
-        # Fallback to manual parsing
-        pass
+    if _real_load_dotenv is not None:
+        try:
+            _real_load_dotenv(path)
+            return
+        except Exception:  # pragma: no cover - dotenv failed unexpectedly
+            pass
 
     candidate = Path(path) if path is not None else Path(".env")
     if not candidate.exists():
