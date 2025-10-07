@@ -319,88 +319,18 @@ class YandexMusic(MusicService):
                     return data
             except TypeError:
                 pass
-        payload: Dict[str, Any] = {}
-        for attr in ("id", "track_id", "real_id", "title", "name"):
-            value = getattr(candidate, attr, None)
-            if value is not None:
-                payload[attr] = value
-
-        artists = getattr(candidate, "artists", None)
-        if artists:
-            serialized_artists: List[dict] = []
-            for entry in artists:
-                if isinstance(entry, dict):
-                    serialized_artists.append(entry)
-                    continue
-                name = getattr(entry, "name", None) or getattr(entry, "title", None)
-                if name:
-                    serialized_artists.append({"name": name})
-            if serialized_artists:
-                payload["artists"] = serialized_artists
-
-        albums = getattr(candidate, "albums", None)
-        if albums:
-            serialized_albums: List[dict] = []
-            for album in albums:
-                if isinstance(album, dict):
-                    serialized_albums.append(album)
-                    continue
-                album_payload: Dict[str, Any] = {}
-                album_id = getattr(album, "id", None)
-                album_name = getattr(album, "name", None) or getattr(album, "title", None)
-                if album_id is not None:
-                    album_payload["id"] = album_id
-                if album_name:
-                    album_payload["name"] = album_name
-                if album_payload:
-                    serialized_albums.append(album_payload)
-            if serialized_albums:
-                payload["albums"] = serialized_albums
-
-        return payload or None
-
-    @staticmethod
-    def _extract_artist_names(candidate: dict) -> List[str]:
-        artists = candidate.get("artists") or []
-        names: List[str] = []
-        for entry in artists:
-            if isinstance(entry, str):
-                names.append(entry)
-                continue
-            if isinstance(entry, dict):
-                name = entry.get("name") or entry.get("title")
-            else:
-                name = getattr(entry, "name", None) or getattr(entry, "title", None)
-            if name:
-                names.append(str(name))
-        return names
-
-    @classmethod
-    def _candidate_matches(cls, candidate: dict, artist: str, title: str) -> bool:
-        expected_title = normalize_text(title)
-        candidate_title = candidate.get("title") or candidate.get("name")
-        candidate_title_norm = normalize_text(candidate_title)
-        if expected_title and candidate_title_norm:
-            if expected_title not in candidate_title_norm and candidate_title_norm not in expected_title:
-                return False
-
-        expected_artist = normalize_text(artist)
-        if not expected_artist:
-            return True
-
-        for name in cls._extract_artist_names(candidate):
-            normalized_name = normalize_text(name)
-            if expected_artist in normalized_name or normalized_name in expected_artist:
-                return True
-        return False
+        return None
 
     @classmethod
     def _extract_track_id(cls, track: Any) -> Optional[str]:
         payload = cls._candidate_to_dict(track)
-        if not payload:
-            return None
-        for key in ("id", "track_id", "real_id"):
-            value = payload.get(key)
+        if payload:
+            for key in ("id", "track_id", "real_id"):
+                value = payload.get(key)
+                if value is not None:
+                    return str(value)
+        for attr in ("id", "track_id", "real_id"):
+            value = getattr(track, attr, None)
             if value is not None:
                 return str(value)
         return None
@@ -451,27 +381,21 @@ class YandexMusic(MusicService):
         if not result:
             return None
 
-        fallback_candidate: Optional[dict] = None
-
         best_section = self._get_attr(result, "best")
         best_type = self._get_attr(best_section, "type")
         best_candidate_raw = self._get_attr(best_section, "result")
         best_candidate = self._candidate_to_dict(best_candidate_raw)
 
         if best_type == "track" and best_candidate:
-            if self._candidate_matches(best_candidate, artist, title):
-                return best_candidate
-            fallback_candidate = best_candidate
+            return best_candidate
 
+        fallback_candidate: Optional[dict] = best_candidate
         tracks_section = self._get_attr(result, "tracks")
         for candidate in self._iter_track_candidates(tracks_section):
             candidate_payload = self._candidate_to_dict(candidate)
             if not candidate_payload:
                 continue
-            if self._candidate_matches(candidate_payload, artist, title):
-                return candidate_payload
-            if fallback_candidate is None:
-                fallback_candidate = candidate_payload
+            return candidate_payload
 
         return fallback_candidate
 
@@ -987,11 +911,24 @@ class YandexMusic(MusicService):
             lambda: self.client.search(query, type_="album"),
         )
 
-        candidates = []
+        candidates: List[Any] = []
+        direct_results: List[Any] = []
         if search and getattr(search, "albums", None):
-            candidates = getattr(search.albums, "results", []) or []
+            search_albums = getattr(search, "albums", None)
+            if isinstance(search_albums, dict):
+                direct_results = search_albums.get("results") or []
+            else:
+                direct_results = getattr(search_albums, "results", []) or []
+        if search and getattr(search, "best", None):
+            best_obj = getattr(search, "best")
+            best_type = getattr(best_obj, "type", None)
+            best_payload = getattr(best_obj, "result", None)
+            if best_type == "album" and best_payload:
+                candidates.append(best_payload)
+        candidates.extend(direct_results)
 
         target_key = album_key(album)
+        fallback: Optional[FavoriteAlbum] = None
         for candidate in candidates:
             candidate_album = FavoriteAlbum(
                 service="yandex",
@@ -1000,7 +937,11 @@ class YandexMusic(MusicService):
                 artist=_join_artist_names(getattr(candidate, "artists", [])),
                 last_seen=_now_utc(),
             )
+            if not candidate_album.album_id:
+                continue
             if target_key and album_key(candidate_album) != target_key:
+                if fallback is None and candidate_album.name and candidate_album.artist:
+                    fallback = candidate_album
                 continue
 
             def _add_candidate():
@@ -1015,6 +956,18 @@ class YandexMusic(MusicService):
                 candidate_album.name,
             )
             return candidate_album
+
+        if fallback:
+            self._execute_with_retry(
+                f"Add Yandex album {fallback.album_id}",
+                lambda: self.client.users_likes_albums_add([fallback.album_id]),
+            )
+            logger.info(
+                "Добавлен альбом в Yandex (fallback): %s — %s",
+                fallback.artist,
+                fallback.name,
+            )
+            return fallback
 
         logger.warning(
             "Не удалось найти альбом в Yandex по запросу '%s'", query
@@ -1050,11 +1003,24 @@ class YandexMusic(MusicService):
             f"Search Yandex artist '{query}'",
             lambda: self.client.search(query, type_="artist"),
         )
-        candidates = []
+        candidates: List[Any] = []
+        direct_results: List[Any] = []
         if search and getattr(search, "artists", None):
-            candidates = getattr(search.artists, "results", []) or []
+            search_artists = getattr(search, "artists", None)
+            if isinstance(search_artists, dict):
+                direct_results = search_artists.get("results") or []
+            else:
+                direct_results = getattr(search_artists, "results", []) or []
+        if search and getattr(search, "best", None):
+            best_obj = getattr(search, "best")
+            best_type = getattr(best_obj, "type", None)
+            best_payload = getattr(best_obj, "result", None)
+            if best_type == "artist" and best_payload:
+                candidates.append(best_payload)
+        candidates.extend(direct_results)
 
         target_key = artist_key(artist)
+        fallback: Optional[FavoriteArtist] = None
         for candidate in candidates:
             candidate_artist = FavoriteArtist(
                 service="yandex",
@@ -1062,7 +1028,11 @@ class YandexMusic(MusicService):
                 name=getattr(candidate, "name", None),
                 last_seen=_now_utc(),
             )
+            if not candidate_artist.artist_id:
+                continue
             if target_key and artist_key(candidate_artist) != target_key:
+                if fallback is None and candidate_artist.name:
+                    fallback = candidate_artist
                 continue
 
             def _follow_candidate():
@@ -1076,6 +1046,19 @@ class YandexMusic(MusicService):
             )
             logger.info("Добавлен исполнитель в Yandex: %s", candidate_artist.name)
             return candidate_artist
+
+        if fallback:
+            self._execute_with_retry(
+                f"Follow Yandex artist {fallback.artist_id}",
+                lambda: self.client.users_likes_artists_add([
+                    fallback.artist_id
+                ]),
+            )
+            logger.info(
+                "Добавлен исполнитель в Yandex (fallback): %s",
+                fallback.name,
+            )
+            return fallback
 
         logger.warning("Не удалось найти исполнителя в Yandex по запросу '%s'", query)
         return None

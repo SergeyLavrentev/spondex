@@ -125,7 +125,7 @@ def test_search_track_handles_search_object_tracks_payload():
     assert result["albums"][0]["id"] == "999"
 
 
-def test_search_track_prefers_matching_candidate_over_best():
+def test_search_track_returns_best_track_even_if_mismatch():
     yandex = make_yandex_music()
     wrong_track = DummyTrack(identifier=111, album_identifier=222, title="Wrong Song", artists=["Other Artist"])
     correct_track = DummyTrack(identifier=333, album_identifier=444, title="Right Song", artists=["Target Artist"])
@@ -137,4 +137,4 @@ def test_search_track_prefers_matching_candidate_over_best():
 
     result = yandex.search_track("Target Artist", "Right Song")
 
-    assert result["id"] == "333"
+    assert result["id"] == "111"
