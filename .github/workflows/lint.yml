@@ -18,31 +18,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Ansible Environment
+        uses: ./.github/actions/setup-ansible-env
         with:
-          python-version: '3.13'
-
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Install dependencies
-        env:
-          UV_EXTRA: dev
-        run: uv sync --frozen --extra dev
-
-      - name: Run Ruff lint
-        run: uvx ruff@0.6.5 check .
-
-      - name: Install Ansible tooling
-        run: |
-          uv tool install ansible
-          uv tool install ansible-lint
-
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install --force -r ansible/requirements.yml -p ansible/collections
+          extra-tools: ansible-lint
 
       - name: Run Ansible lint
         run: ansible-lint -c ansible/ansible-lint.yml ansible/deploy.yml
