@@ -49,12 +49,20 @@ def _ensure_package(package: str, *, required: bool = True) -> bool:
         logger.debug("Unexpected import error for '%s': %s", package, exc)
         logger.warning("Attempting to (re)install '%s'...", package)
 
-    if not required and not _running_in_virtualenv():
-        logger.info(
-            "Skipping auto-install of optional package '%s' outside of a virtual environment.",
+    if not _running_in_virtualenv():
+        if not required:
+            logger.info(
+                "Skipping auto-install of optional package '%s' outside of a virtual environment.",
+                package,
+            )
+            return False
+
+        logger.error(
+            "Package '%s' is required but cannot be auto-installed in this managed environment. "
+            "Please install it manually (e.g., via apt, pipx, or inside a virtualenv) and rerun the script.",
             package,
         )
-        return False
+        raise SystemExit(1)
 
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", package])
