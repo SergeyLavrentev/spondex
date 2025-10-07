@@ -310,9 +310,25 @@ class YandexMusic(MusicService):
 
     def search_track(self, artist: str, title: str) -> Optional[dict]:
         query = f"{artist} {title}"
-        result = self.client.search(query)
-        if result["best"] and result["best"]["type"] == "track":
-            return result["best"]["result"]
+        result = self.client.search(query) or {}
+        best = result.get("best") or {}
+        if best.get("type") == "track" and best.get("result"):
+            return best["result"]
+
+        tracks_section = result.get("tracks")
+        candidates: Sequence[dict] = ()
+        if isinstance(tracks_section, dict):
+            candidates = (
+                tracks_section.get("results")
+                or tracks_section.get("items")
+                or ()
+            )
+        elif isinstance(tracks_section, (list, tuple)):
+            candidates = tracks_section
+
+        for candidate in candidates:
+            if candidate:
+                return candidate
         return None
 
     def add_track(self, track: dict) -> Optional[str]:
