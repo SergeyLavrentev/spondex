@@ -269,87 +269,47 @@ class YandexMusic(MusicService):
         self._base_retry_delay = 1.5
 
     @staticmethod
-    def _read_value(source: Any, key: str, default: Any = None) -> Any:
-        if source is None:
-            return default
-        if isinstance(source, dict):
-            return source.get(key, default)
-        return getattr(source, key, default)
-
-    @classmethod
-    def _normalize_simple_entity(cls, entity: Any) -> Optional[dict]:
-        if entity is None:
-            return None
-        if isinstance(entity, dict):
-            return entity
-        if hasattr(entity, "to_dict"):
+    def _maybe_to_dict(value: Any) -> Any:
+        if isinstance(value, dict) or value is None:
+            return value
+        to_dict = getattr(value, "to_dict", None)
+        if callable(to_dict):
             try:
-                data = entity.to_dict()
-                if isinstance(data, dict):
-                    return data
+                converted = to_dict()
+                if isinstance(converted, dict):
+                    return converted
             except TypeError:
                 pass
-        normalized: Dict[str, Any] = {}
-        for attr in ("id", "track_id", "name", "title"):
-            value = getattr(entity, attr, None)
-            if value is not None:
-                if attr in ("id", "track_id"):
-                    normalized[attr] = str(value)
-                else:
-                    normalized[attr] = value
-        return normalized or None
+        return value
 
     @classmethod
-    def _normalize_track_candidate(cls, candidate: Any) -> Optional[dict]:
-        if candidate is None:
+    def _iter_track_candidates(cls, section: Any) -> Iterable[Any]:
+        section = cls._maybe_to_dict(section)
+        if isinstance(section, dict):
+            for key in ("results", "items", "tracks"):
+                payload = section.get(key)
+                if payload:
+                    return payload
+            return ()
+        if isinstance(section, (list, tuple)):
+            return section
+        return ()
+
+    @staticmethod
+    def _extract_track_id(track: Any) -> Optional[str]:
+        if track is None:
             return None
-        if isinstance(candidate, dict):
-            return candidate
-        if hasattr(candidate, "to_dict"):
-            try:
-                data = candidate.to_dict()
-                if isinstance(data, dict):
-                    if "id" in data and data["id"] is not None:
-                        data = data.copy()
-                        data["id"] = str(data["id"])
-                        if "track_id" in data and data["track_id"] is not None:
-                            data["track_id"] = str(data["track_id"])
-                    return data
-            except TypeError:
-                pass
-
-        normalized: Dict[str, Any] = {}
-        track_identifier = getattr(candidate, "id", None)
-        alternate_identifier = getattr(candidate, "track_id", None)
-
-        identifier = track_identifier or alternate_identifier
-        if identifier is not None:
-            normalized["id"] = str(identifier)
-            if alternate_identifier is not None:
-                normalized.setdefault("track_id", str(alternate_identifier))
-
-        for attr in ("title", "duration_ms", "available"):
-            value = getattr(candidate, attr, None)
+        if isinstance(track, dict):
+            for key in ("id", "track_id", "real_id"):
+                value = track.get(key)
+                if value is not None:
+                    return str(value)
+            return None
+        for attr in ("id", "track_id", "real_id"):
+            value = getattr(track, attr, None)
             if value is not None:
-                normalized[attr] = value
-
-        albums_payload: List[dict] = []
-        for album in getattr(candidate, "albums", []) or []:
-            normalized_album = cls._normalize_simple_entity(album)
-            if normalized_album:
-                albums_payload.append(normalized_album)
-        if albums_payload:
-            normalized["albums"] = albums_payload
-
-        artists_payload: List[dict] = []
-        for artist in getattr(candidate, "artists", []) or []:
-            normalized_artist = cls._normalize_simple_entity(artist)
-            if normalized_artist:
-                artists_payload.append(normalized_artist)
-        if artists_payload:
-            normalized["artists"] = artists_payload
-
-        return normalized or None
+                return str(value)
+        return None
 
     def _execute_with_retry(self, description: str, func: Callable[[], Any]):
         for attempt in range(1, self._max_attempts + 1):
@@ -397,41 +357,40 @@ class YandexMusic(MusicService):
         if not result:
             return None
 
-        best_section = self._read_value(result, "best")
-        best_type = self._read_value(best_section, "type")
-        best_candidate = self._read_value(best_section, "result")
+        result_payload = self._maybe_to_dict(result)
+        if not isinstance(result_payload, dict):
+            return None
 
-        if best_type == "track":
-            normalized_best = self._normalize_track_candidate(best_candidate)
-            if normalized_best:
-                return normalized_best
-
-        tracks_section = self._read_value(result, "tracks")
-        candidates: Iterable[Any]
-        if isinstance(tracks_section, (list, tuple)):
-            candidates = tracks_section
+        best_section = self._maybe_to_dict(result_payload.get("best"))
+        best_type: Optional[str]
+        best_candidate: Any
+        if isinstance(best_section, dict):
+            best_type = best_section.get("type")
+            best_candidate = self._maybe_to_dict(best_section.get("result"))
         else:
-            candidates = ()
-            if tracks_section is not None:
-                for key in ("results", "items"):
-                    extracted = self._read_value(tracks_section, key)
-                    if extracted:
-                        candidates = extracted
-                        break
+            best_type = getattr(best_section, "type", None)
+            best_candidate = self._maybe_to_dict(
+                getattr(best_section, "result", None)
+            )
 
-        for candidate in candidates or ():
-            normalized = self._normalize_track_candidate(candidate)
-            if normalized:
-                return normalized
+        if best_type == "track" and isinstance(best_candidate, dict):
+            return best_candidate
+
+        tracks_section = result_payload.get("tracks")
+        for candidate in self._iter_track_candidates(tracks_section) or ():
+            candidate_payload = self._maybe_to_dict(candidate)
+            if isinstance(candidate_payload, dict):
+                return candidate_payload
         return None
 
     def add_track(self, track: dict) -> Optional[str]:
         yandex_track = self.search_track(
             track["track"]["artists"][0]["name"], track["track"]["name"]
         )
-        if yandex_track:
-            self.client.users_likes_tracks_add(yandex_track["id"])
-            return yandex_track["id"]
+        track_id = self._extract_track_id(yandex_track)
+        if track_id:
+            self.client.users_likes_tracks_add(track_id)
+            return track_id
         logger.warning(
             f"Track not found in Yandex: {track['track']['artists'][0]['name']} - {track['track']['name']}"
         )
