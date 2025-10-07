@@ -269,44 +269,138 @@ class YandexMusic(MusicService):
         self._base_retry_delay = 1.5
 
     @staticmethod
-    def _maybe_to_dict(value: Any) -> Any:
-        if isinstance(value, dict) or value is None:
-            return value
-        to_dict = getattr(value, "to_dict", None)
-        if callable(to_dict):
-            try:
-                converted = to_dict()
-                if isinstance(converted, dict):
-                    return converted
-            except TypeError:
-                pass
-        return value
+    def _get_attr(source: Any, key: str) -> Any:
+        if source is None:
+            return None
+        if isinstance(source, dict):
+            return source.get(key)
+        return getattr(source, key, None)
 
     @classmethod
     def _iter_track_candidates(cls, section: Any) -> Iterable[Any]:
-        section = cls._maybe_to_dict(section)
+        if section is None:
+            return ()
+        if isinstance(section, (list, tuple)):
+            return section
         if isinstance(section, dict):
             for key in ("results", "items", "tracks"):
                 payload = section.get(key)
                 if payload:
                     return payload
             return ()
-        if isinstance(section, (list, tuple)):
-            return section
+        for key in ("results", "items", "tracks"):
+            payload = getattr(section, key, None)
+            if payload:
+                return payload
+        to_dict = getattr(section, "to_dict", None)
+        if callable(to_dict):
+            try:
+                data = to_dict()
+            except TypeError:
+                data = None
+            if isinstance(data, dict):
+                for key in ("results", "items", "tracks"):
+                    payload = data.get(key)
+                    if payload:
+                        return payload
         return ()
 
     @staticmethod
-    def _extract_track_id(track: Any) -> Optional[str]:
-        if track is None:
+    def _candidate_to_dict(candidate: Any) -> Optional[dict]:
+        if candidate is None:
             return None
-        if isinstance(track, dict):
-            for key in ("id", "track_id", "real_id"):
-                value = track.get(key)
-                if value is not None:
-                    return str(value)
+        if isinstance(candidate, dict):
+            return candidate
+        to_dict = getattr(candidate, "to_dict", None)
+        if callable(to_dict):
+            try:
+                data = to_dict()
+                if isinstance(data, dict):
+                    return data
+            except TypeError:
+                pass
+        payload: Dict[str, Any] = {}
+        for attr in ("id", "track_id", "real_id", "title", "name"):
+            value = getattr(candidate, attr, None)
+            if value is not None:
+                payload[attr] = value
+
+        artists = getattr(candidate, "artists", None)
+        if artists:
+            serialized_artists: List[dict] = []
+            for entry in artists:
+                if isinstance(entry, dict):
+                    serialized_artists.append(entry)
+                    continue
+                name = getattr(entry, "name", None) or getattr(entry, "title", None)
+                if name:
+                    serialized_artists.append({"name": name})
+            if serialized_artists:
+                payload["artists"] = serialized_artists
+
+        albums = getattr(candidate, "albums", None)
+        if albums:
+            serialized_albums: List[dict] = []
+            for album in albums:
+                if isinstance(album, dict):
+                    serialized_albums.append(album)
+                    continue
+                album_payload: Dict[str, Any] = {}
+                album_id = getattr(album, "id", None)
+                album_name = getattr(album, "name", None) or getattr(album, "title", None)
+                if album_id is not None:
+                    album_payload["id"] = album_id
+                if album_name:
+                    album_payload["name"] = album_name
+                if album_payload:
+                    serialized_albums.append(album_payload)
+            if serialized_albums:
+                payload["albums"] = serialized_albums
+
+        return payload or None
+
+    @staticmethod
+    def _extract_artist_names(candidate: dict) -> List[str]:
+        artists = candidate.get("artists") or []
+        names: List[str] = []
+        for entry in artists:
+            if isinstance(entry, str):
+                names.append(entry)
+                continue
+            if isinstance(entry, dict):
+                name = entry.get("name") or entry.get("title")
+            else:
+                name = getattr(entry, "name", None) or getattr(entry, "title", None)
+            if name:
+                names.append(str(name))
+        return names
+
+    @classmethod
+    def _candidate_matches(cls, candidate: dict, artist: str, title: str) -> bool:
+        expected_title = normalize_text(title)
+        candidate_title = candidate.get("title") or candidate.get("name")
+        candidate_title_norm = normalize_text(candidate_title)
+        if expected_title and candidate_title_norm:
+            if expected_title not in candidate_title_norm and candidate_title_norm not in expected_title:
+                return False
+
+        expected_artist = normalize_text(artist)
+        if not expected_artist:
+            return True
+
+        for name in cls._extract_artist_names(candidate):
+            normalized_name = normalize_text(name)
+            if expected_artist in normalized_name or normalized_name in expected_artist:
+                return True
+        return False
+
+    @classmethod
+    def _extract_track_id(cls, track: Any) -> Optional[str]:
+        payload = cls._candidate_to_dict(track)
+        if not payload:
             return None
-        for attr in ("id", "track_id", "real_id"):
-            value = getattr(track, attr, None)
+        for key in ("id", "track_id", "real_id"):
+            value = payload.get(key)
             if value is not None:
                 return str(value)
         return None
@@ -357,31 +451,29 @@ class YandexMusic(MusicService):
         if not result:
             return None
 
-        result_payload = self._maybe_to_dict(result)
-        if not isinstance(result_payload, dict):
-            return None
+        fallback_candidate: Optional[dict] = None
 
-        best_section = self._maybe_to_dict(result_payload.get("best"))
-        best_type: Optional[str]
-        best_candidate: Any
-        if isinstance(best_section, dict):
-            best_type = best_section.get("type")
-            best_candidate = self._maybe_to_dict(best_section.get("result"))
-        else:
-            best_type = getattr(best_section, "type", None)
-            best_candidate = self._maybe_to_dict(
-                getattr(best_section, "result", None)
-            )
+        best_section = self._get_attr(result, "best")
+        best_type = self._get_attr(best_section, "type")
+        best_candidate_raw = self._get_attr(best_section, "result")
+        best_candidate = self._candidate_to_dict(best_candidate_raw)
 
-        if best_type == "track" and isinstance(best_candidate, dict):
-            return best_candidate
+        if best_type == "track" and best_candidate:
+            if self._candidate_matches(best_candidate, artist, title):
+                return best_candidate
+            fallback_candidate = best_candidate
 
-        tracks_section = result_payload.get("tracks")
-        for candidate in self._iter_track_candidates(tracks_section) or ():
-            candidate_payload = self._maybe_to_dict(candidate)
-            if isinstance(candidate_payload, dict):
+        tracks_section = self._get_attr(result, "tracks")
+        for candidate in self._iter_track_candidates(tracks_section):
+            candidate_payload = self._candidate_to_dict(candidate)
+            if not candidate_payload:
+                continue
+            if self._candidate_matches(candidate_payload, artist, title):
                 return candidate_payload
-        return None
+            if fallback_candidate is None:
+                fallback_candidate = candidate_payload
+
+        return fallback_candidate
 
     def add_track(self, track: dict) -> Optional[str]:
         yandex_track = self.search_track(

@@ -1,7 +1,7 @@
 import types
 from unittest.mock import MagicMock
 
-from typing import Any
+from typing import Any, Optional
 
 from src.main import YandexMusic
 
@@ -27,12 +27,13 @@ class DummyAlbum:
 
 
 class DummyTrack:
-    def __init__(self, identifier: Any, album_identifier: Any):
+    def __init__(self, identifier: Any, album_identifier: Any, *, title: str = "Dummy", artists: Optional[list[str]] = None):
         self.id = identifier
         self.track_id = identifier
         self.albums = [DummyAlbum(album_identifier)]
-        self.title = "Dummy"
-        self.artists = [types.SimpleNamespace(name="Dummy Artist")]
+        self.title = title
+        artist_names = artists or ["Dummy Artist"]
+        self.artists = [types.SimpleNamespace(name=name) for name in artist_names]
 
     def to_dict(self, for_request: bool = False) -> dict:
         return {
@@ -122,3 +123,18 @@ def test_search_track_handles_search_object_tracks_payload():
 
     assert result["id"] == "888"
     assert result["albums"][0]["id"] == "999"
+
+
+def test_search_track_prefers_matching_candidate_over_best():
+    yandex = make_yandex_music()
+    wrong_track = DummyTrack(identifier=111, album_identifier=222, title="Wrong Song", artists=["Other Artist"])
+    correct_track = DummyTrack(identifier=333, album_identifier=444, title="Right Song", artists=["Target Artist"])
+
+    yandex.client.search.return_value = DummySearch(
+        best=DummyBest(wrong_track),
+        tracks=DummyTracksSection(results=[wrong_track, correct_track]),
+    )
+
+    result = yandex.search_track("Target Artist", "Right Song")
+
+    assert result["id"] == "333"
