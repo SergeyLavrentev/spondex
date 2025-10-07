@@ -8,37 +8,76 @@ is irreversible unless you re-import the tracks manually.
 from __future__ import annotations
 
 import argparse
+import importlib
 import logging
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Iterable, List
 
-try:
-    from dotenv import load_dotenv  # type: ignore
-except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environments
-    def load_dotenv(path: str | os.PathLike[str] | None = None) -> None:
-        """Fallback implementation that reads key=value pairs from .env."""
 
-        candidate = Path(path) if path is not None else Path(".env")
-        if not candidate.exists():
-            logging.getLogger("clear_yandex_favorites").warning(
-                "python-dotenv not installed; proceeding without .env (file %s not found)",
-                candidate,
-            )
-            return
+def _ensure_package(package: str) -> None:
+    """Install missing package via pip if possible."""
 
-        for raw_line in candidate.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = value
+    spec = importlib.util.find_spec(package)
+    if spec is not None:
+        return
 
+    logger = logging.getLogger("clear_yandex_favorites")
+    logger.warning("Package '%s' not found. Attempting to install...", package)
+
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        logger.error(
+            "Failed to install '%s'. Please install it manually and rerun the script: %s",
+            package,
+            exc,
+        )
+        raise SystemExit(1)
+
+
+def _load_dotenv(path: str | os.PathLike[str] | None = None) -> None:
+    try:
+        from dotenv import load_dotenv as _real_load_dotenv  # type: ignore
+
+        _real_load_dotenv(path)
+        return
+    except ModuleNotFoundError:
+        _ensure_package("python-dotenv")
+        from dotenv import load_dotenv as _real_load_dotenv  # type: ignore
+
+        _real_load_dotenv(path)
+        return
+    except Exception:
+        # Fallback to manual parsing
+        pass
+
+    candidate = Path(path) if path is not None else Path(".env")
+    if not candidate.exists():
+        logging.getLogger("clear_yandex_favorites").warning(
+            "Unable to load .env file at %s", candidate
+        )
+        return
+
+    for raw_line in candidate.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+
+load_dotenv = _load_dotenv
+
+_ensure_package("yandex-music")
 from yandex_music import Client as YandexClient
 
 logger = logging.getLogger("clear_yandex_favorites")
