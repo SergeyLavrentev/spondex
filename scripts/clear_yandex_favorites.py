@@ -14,7 +14,11 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, TYPE_CHECKING
+
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type hints
+    from yandex_music import Client as YandexClient
 
 
 def _ensure_package(package: str) -> None:
@@ -77,10 +81,14 @@ def _load_dotenv(path: str | os.PathLike[str] | None = None) -> None:
 
 load_dotenv = _load_dotenv
 
-_ensure_package("yandex-music")
-from yandex_music import Client as YandexClient
-
 logger = logging.getLogger("clear_yandex_favorites")
+
+
+def _get_yandex_client(token: str) -> "YandexClient":
+    _ensure_package("yandex-music")
+    module = importlib.import_module("yandex_music")
+    YandexClient = getattr(module, "Client")
+    return YandexClient(token=token).init()
 
 
 def configure_logging(verbose: bool) -> None:
@@ -132,7 +140,7 @@ def main() -> None:
         raise SystemExit(1)
 
     logger.info("Connecting to Yandex Music API...")
-    client = YandexClient(token=token).init()
+    client = _get_yandex_client(token)
 
     logger.info("Fetching liked tracks list...")
     liked_tracks = client.users_likes_tracks()
