@@ -1,4 +1,15 @@
----
+- name: Check deployment version metadata presence
+  ansible.builtin.stat:
+    path: "{{ app_root }}/.venv/spondex-version.json"
+  register: deploy_version_stat
+
+- name: Copy deployment version metadata into application container
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.prod.yml cp ./.venv/spondex-version.json app:/app/.venv/spondex-version.json
+    chdir: "{{ app_root }}"
+  when:
+    - deploy_version_stat.stat.exists | default(false)
+
 - name: Copy Spotify cache into application container
   when:
     - (server_cache_stat.stat.exists | default(false)) | bool

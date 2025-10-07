@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 from monitoring.config import Config
-from monitoring.notifier import poll_telegram_subscribers, send_notifications
+from monitoring.notifier import (
+    _handle_status_command,
+    _open_state_store,
+    poll_telegram_subscribers,
+    send_notifications,
+)
 
 
 class _ResponseStub:
@@ -296,3 +303,73 @@ def test_poll_telegram_subscribers_status_command(monkeypatch, tmp_path):
     saved = json.loads(config.notification.telegram.subscriber_store.read_text(encoding="utf-8"))
     assert saved["chat_ids"] == ["515"]
     assert saved["last_update_id"] == 101
+
+
+def test_open_state_store_fallback(monkeypatch, tmp_path):
+    config = Config()
+    primary_path = tmp_path / "no-access" / "state.db"
+    fallback_path = tmp_path / "fallback" / "state.db"
+    config.state_path = primary_path
+
+    calls = []
+
+    class DummyStore:
+        def __init__(self, path):
+            calls.append(Path(path))
+            if Path(path) == primary_path:
+                raise PermissionError("denied")
+            self.path = Path(path)
+
+    monkeypatch.setenv("SPONDEX_MONITOR_STATE_DIR", str(fallback_path))
+    monkeypatch.setattr("monitoring.notifier.StateStore", DummyStore)
+
+    store = _open_state_store(config)
+
+    assert isinstance(store, DummyStore)
+    assert calls[0] == primary_path
+    assert calls[1] == fallback_path
+
+
+def test_handle_status_command_uses_fallback_store(monkeypatch, tmp_path):
+    config = Config()
+    config.notification.telegram.enabled = True
+    config.notification.telegram.chat_ids = ["515"]
+    config.notification.telegram.token = "inline-token"
+    config.state_path = Path("/root/forbidden/state.db")
+
+    fallback_path = tmp_path / "bot-fallback" / "state.db"
+    monkeypatch.setenv("SPONDEX_MONITOR_STATE_DIR", str(fallback_path))
+
+    calls = []
+
+    class DummyStore:
+        def __init__(self, path):
+            calls.append(Path(path))
+            if str(path).startswith("/root/"):
+                raise PermissionError("forbidden")
+            self.path = Path(path)
+
+    monkeypatch.setattr("monitoring.notifier.StateStore", DummyStore)
+
+    def fake_run_checks(ctx):  # type: ignore[no-untyped-def]
+        assert isinstance(ctx.store, DummyStore)
+        return [], []
+
+    def fake_format_report(now, alerts, metrics):  # type: ignore[no-untyped-def]
+        assert isinstance(now, datetime)
+        return "status ok"
+
+    sent_messages: list[str] = []
+
+    def fake_send(config_obj, token, chat_id, text, timeout, disable_preview=True):  # type: ignore[no-untyped-def]
+        sent_messages.append(text)
+
+    monkeypatch.setattr("monitoring.checks.run_checks", fake_run_checks)
+    monkeypatch.setattr("monitoring.monitor.format_report", fake_format_report)
+    monkeypatch.setattr("monitoring.notifier._send_telegram_message", fake_send)
+
+    _handle_status_command(config, "inline-token", "515")
+
+    assert calls[0] == config.state_path
+    assert calls[1] == fallback_path
+    assert sent_messages == ["status ok"]

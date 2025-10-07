@@ -75,6 +75,60 @@
   delegate_to: localhost
   become: false
 
+- name: Determine current git commit hash
+  ansible.builtin.command:
+    cmd: git rev-parse HEAD
+    chdir: "{{ repo_root }}"
+  delegate_to: localhost
+  become: false
+  register: deploy_version_commit
+  changed_when: false
+
+- name: Determine git tag for current commit
+  ansible.builtin.command:
+    cmd: git tag --points-at HEAD
+    chdir: "{{ repo_root }}"
+  delegate_to: localhost
+  become: false
+  register: deploy_version_tag
+  changed_when: false
+
+- name: Determine deployment build timestamp
+  ansible.builtin.command:
+    cmd: date -u +%Y-%m-%dT%H:%M:%SZ
+  delegate_to: localhost
+  become: false
+  register: deploy_version_time
+  changed_when: false
+
+- name: Prepare deployment version metadata values
+  ansible.builtin.set_fact:
+    spondex_commit_value: "{{ deploy_version_commit.stdout | trim }}"
+    spondex_tag_value: "{{ (deploy_version_tag.stdout_lines | select('length') | list | first) | default('', true) }}"
+    spondex_build_time_value: "{{ deploy_version_time.stdout | trim }}"
+
+- name: Build deployment version metadata
+  ansible.builtin.set_fact:
+    spondex_version_metadata:
+      commit: "{{ spondex_commit_value }}"
+      commit_short: "{{ spondex_commit_value[:7] if spondex_commit_value else '' }}"
+      tag: "{{ spondex_tag_value }}"
+      build_time: "{{ spondex_build_time_value }}"
+      source: "deploy"
+      version: "{{ spondex_tag_value if spondex_tag_value else (spondex_commit_value[:7] if spondex_commit_value else '') }}"
+
+- name: Ensure version metadata directory exists
+  ansible.builtin.file:
+    path: "{{ app_root }}/.venv"
+    state: directory
+    mode: '0755'
+
+- name: Write deployment version metadata to server
+  ansible.builtin.copy:
+    content: "{{ spondex_version_metadata | to_nice_json }}\n"
+    dest: "{{ app_root }}/.venv/spondex-version.json"
+    mode: '0644'
+
 - name: Render runtime environment file
   ansible.builtin.template:
     src: env.j2

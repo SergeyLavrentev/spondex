@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import errno
 import json
+import logging
 import os
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -11,6 +14,9 @@ from urllib.parse import urlencode
 
 from .checks import Alert, CheckContext
 from .config import Config
+from .storage import StateStore
+
+logger = logging.getLogger(__name__)
 
 
 def _send_telegram_payload(
@@ -258,17 +264,69 @@ def _poll_telegram_updates(
     return chat_ids, max_update_id, new_chat_ids
 
 
+def _fallback_state_path() -> Path:
+    override = os.environ.get("SPONDEX_MONITOR_STATE_DIR")
+    if override:
+        return Path(override)
+
+    try:
+        home = Path.home()
+    except Exception:
+        home = None
+
+    if home and str(home) not in ("", "."):
+        return home / ".cache" / "spondex-monitor" / "bot-state.db"
+
+    return Path(tempfile.gettempdir()) / "spondex-monitor" / "bot-state.db"
+
+
+def _open_state_store(config: Config) -> StateStore:
+    try:
+        return StateStore(config.state_path)
+    except OSError as exc:
+        if not isinstance(exc, PermissionError) and exc.errno not in (errno.EACCES, errno.EROFS):
+            raise
+
+        fallback_path = _fallback_state_path()
+        try:
+            fallback_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as mkdir_exc:
+            alt_path = Path(tempfile.gettempdir()) / "spondex-monitor" / "bot-state.db"
+            logger.warning(
+                "Cannot create fallback directory %s (%s). Retrying with %s",
+                fallback_path.parent,
+                mkdir_exc,
+                alt_path.parent,
+            )
+            alt_path.parent.mkdir(parents=True, exist_ok=True)
+            fallback_path = alt_path
+        logger.warning(
+            "Cannot open monitoring state at %s (%s). Falling back to %s",
+            config.state_path,
+            exc,
+            fallback_path,
+        )
+        try:
+            return StateStore(fallback_path)
+        except Exception as fallback_exc:  # pragma: no cover
+            logger.error(
+                "Failed to open fallback monitoring state at %s: %s",
+                fallback_path,
+                fallback_exc,
+            )
+            raise
+
+
 def _handle_status_command(config: Config, token: str, chat_id: str) -> None:
     """Handle /status command by sending current metrics to the user."""
     try:
         from .checks import run_checks
         from .monitor import format_report
-        from .storage import StateStore
         from datetime import datetime
         
         # Get current metrics
         now = datetime.now().astimezone()
-        store = StateStore(config.state_path)
+        store = _open_state_store(config)
         ctx = CheckContext(config=config, store=store, now=now)
         
         metrics, alerts = run_checks(ctx)

@@ -252,16 +252,13 @@ python -m monitoring.monitor --config monitoring/config.sample.yaml --telegram
 и запускаются через `pytest`.
 
 For integration coverage, Molecule сценарий роли находится в
-`ansible/roles/monitoring/molecule/default`. Локально запускайте его в отдельном
-виртуальном окружении, чтобы не загрязнять системный Python:
+`ansible/roles/monitoring/molecule/default`. Локально запускайте его через `uvx`,
+чтобы не поднимать отдельное виртуальное окружение и не засорять системный Python:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install molecule molecule-plugins[docker] ansible
 ANSIBLE_COLLECTIONS_PATHS="$PWD/.molecule-collections:/usr/share/ansible/collections" \
-  molecule test --scenario-name default
+  uvx --with "molecule-plugins[docker]" --with ansible molecule test --scenario-name default
 ```
 
-CI workflow `.github/workflows/molecule.yml` делает то же самое, но если тесты
-падают, пайплайн остаётся зелёным — ошибки можно посмотреть в логах шага.
+CI workflow `.github/workflows/molecule.yml` выполняет те же проверки c помощью `uv run`.
+Если тесты падают, пайплайн остаётся зелёным — ошибки можно посмотреть в логах шага.

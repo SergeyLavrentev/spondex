@@ -6,7 +6,7 @@ import os
 import random
 import time
 from pathlib import Path
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import psutil
 import spotipy
@@ -30,6 +30,83 @@ logger = logging.getLogger(__name__)
 
 def _now_utc() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _version_file_path() -> Path:
+    env_path = os.environ.get("SPONDEX_VERSION_FILE")
+    if env_path:
+        return Path(env_path)
+    return _project_root() / ".venv" / "spondex-version.json"
+
+
+def _load_package_version() -> str:
+    default_version = "0.0.0"
+    try:
+        import tomllib  # type: ignore[attr-defined]
+
+        pyproject_path = _project_root() / "pyproject.toml"
+        if pyproject_path.exists():
+            with open(pyproject_path, "rb") as handle:
+                data = tomllib.load(handle)
+            return data.get("project", {}).get("version", default_version)
+    except (ImportError, OSError, ValueError) as exc:
+        logger.debug("tomllib unavailable or failed to parse pyproject.toml: %s", exc)
+
+    try:
+        import toml  # type: ignore[import-not-found]
+
+        pyproject_path = _project_root() / "pyproject.toml"
+        if pyproject_path.exists():
+            data = toml.load(pyproject_path)
+            return (
+                data.get("project", {}).get("version")
+                or data.get("tool", {}).get("poetry", {}).get("version")
+                or default_version
+            )
+    except (ImportError, OSError, ValueError) as exc:
+        logger.debug("toml unavailable or failed to parse pyproject.toml: %s", exc)
+
+    return default_version
+
+
+def _load_deploy_version() -> Dict[str, Optional[str]]:
+    version_file = _version_file_path()
+    metadata: Dict[str, Optional[str]] = {
+        "commit": None,
+        "commit_short": None,
+        "tag": None,
+        "build_time": None,
+        "source": None,
+    }
+
+    if not version_file.exists():
+        return metadata
+
+    try:
+        content = version_file.read_text(encoding="utf-8")
+        data = json.loads(content)
+    except (OSError, ValueError) as exc:
+        logger.warning("Не удалось прочитать версию деплоя из %s: %s", version_file, exc)
+        return metadata
+
+    commit = str(data.get("commit")) if data.get("commit") else None
+    tag = str(data.get("tag")) if data.get("tag") else None
+
+    metadata.update(
+        {
+            "commit": commit,
+            "commit_short": commit[:7] if commit else None,
+            "tag": tag,
+            "build_time": str(data.get("build_time")) if data.get("build_time") else None,
+            "source": str(data.get("source")) if data.get("source") else None,
+        }
+    )
+
+    return metadata
 
 
 def _parse_datetime(value: Optional[str]) -> Optional[datetime.datetime]:
@@ -113,30 +190,15 @@ def check_and_fix_spotify_cache():
 
 # Flask application for status endpoint
 app = Flask(__name__)
+app._start_time = time.time()
 
 @app.route('/status')
 def status():
     """Health check and metrics endpoint for monitoring."""
     try:
-        # Get version from pyproject.toml
-        version = "1.0.0"  # Default fallback
-        try:
-            import tomllib
-            pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
-            if pyproject_path.exists():
-                with open(pyproject_path, "rb") as f:
-                    data = tomllib.load(f)
-                    version = data.get("project", {}).get("version", "1.0.0")
-        except ImportError:
-            # tomllib is Python 3.11+, fallback to toml if available
-            try:
-                import toml
-                pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
-                if pyproject_path.exists():
-                    data = toml.load(pyproject_path)
-                    version = data.get("tool", {}).get("poetry", {}).get("version", "1.0.0")
-            except ImportError:
-                pass
+        package_version = _load_package_version()
+        deploy_version = _load_deploy_version()
+        version_display = deploy_version.get("tag") or deploy_version.get("commit_short") or package_version
 
         # Basic health data
         uptime_seconds = int(time.time() - getattr(app, '_start_time', time.time()))
@@ -173,11 +235,19 @@ def status():
         health_data = {
             "status": overall_status,
             "app_name": "Spondex",
-            "version": version,
+            "version": version_display,
             "uptime": uptime_formatted,
             "timestamp": datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z'),
             "health_checks": health_checks,
-            "system": system_info
+            "system": system_info,
+            "release": {
+                "package": package_version,
+                "commit": deploy_version.get("commit"),
+                "commit_short": deploy_version.get("commit_short"),
+                "tag": deploy_version.get("tag"),
+                "build_time": deploy_version.get("build_time"),
+                "source": deploy_version.get("source"),
+            },
         }
         
         return jsonify(health_data), 200
@@ -594,6 +664,48 @@ class YandexMusic(MusicService):
                     return True
 
         return False
+
+    def _clear_playlist_tracks(self, playlist_obj):
+        refreshed = self._refresh_playlist_object(playlist_obj)
+        attempts = 0
+
+        while attempts < 3:
+            tracks_attr = getattr(refreshed, "tracks", []) or []
+            if not tracks_attr:
+                return refreshed
+
+            def _delete_all():
+                return self.client.users_playlists_delete_track(
+                    getattr(refreshed, "kind"),
+                    from_=0,
+                    to=len(tracks_attr),
+                    revision=getattr(refreshed, "revision", 1),
+                )
+
+            try:
+                updated = self._execute_with_retry(
+                    f"Clear Yandex playlist {getattr(refreshed, 'kind', 'unknown')}",
+                    _delete_all,
+                )
+            except YandexMusicError as exc:
+                if self._is_wrong_revision_error(exc):
+                    attempts += 1
+                    refreshed = self._refresh_playlist_object(refreshed)
+                    continue
+                raise
+
+            if updated:
+                refreshed = updated
+            else:
+                refreshed = self._refresh_playlist_object(refreshed)
+
+            tracks_after = getattr(refreshed, "tracks", []) or []
+            if not tracks_after:
+                return refreshed
+
+            attempts += 1
+
+        return refreshed
 
     @staticmethod
     def _is_wrong_revision_error(exc: Exception) -> bool:
@@ -1339,8 +1451,11 @@ class MusicSynchronizer:
 
             # Clear the Yandex playlist before adding tracks to avoid duplicates
             try:
-                self.yandex.client.playlists_edit(yandex_playlist.playlist_id, tracks=[])
-                logger.info("Очищен плейлист Yandex '%s' перед синхронизацией", playlist.name)
+                yandex_playlist = self._clear_playlist_tracks(yandex_playlist)
+                logger.info(
+                    "Очищен плейлист Yandex '%s' перед синхронизацией",
+                    playlist.name,
+                )
             except Exception as exc:
                 logger.error("Не удалось очистить плейлист '%s': %s", playlist.name, exc)
                 continue

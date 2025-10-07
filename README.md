@@ -289,19 +289,16 @@ JSON-хранилище).
 
 ### Molecule-тесты роли мониторинга
 
-Для локального прогона создайте виртуальное окружение и ставьте зависимости
-только внутрь него:
+Для локального прогона используйте `uvx`, который подтянет необходимые пакеты на время запуска
+и не создаст лишние окружения:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install molecule molecule-plugins[docker] ansible
 ANSIBLE_COLLECTIONS_PATHS="$PWD/.molecule-collections:/usr/share/ansible/collections" \
-   molecule test --scenario-name default
+   uvx --with "molecule-plugins[docker]" --with ansible molecule test --scenario-name default
 ```
 
-В CI добавлен пайплайн `.github/workflows/molecule.yml`, который запускает те же
-проверки внутри venv. Шаг отмечен как `continue-on-error`, поэтому не красит
+В CI добавлен пайплайн `.github/workflows/molecule.yml`, который выполняет те же
+проверки через `uv run`. Шаг отмечен как `continue-on-error`, поэтому не красит
 весь pipeline, если тесты не прошли, но лог ошибок остаётся доступным.
 
 Плейлисты автоматически создаются (если их ещё нет) и пополняются недостающими треками в Yandex Music. Для избранных альбомов и исполнителей дифф добавляет недостающие элементы в выбранную целевую платформу; по умолчанию данные уезжают только в Yandex. Удаление ни для одного из режимов не выполняется. Чтобы ограничиться аналитикой без изменений, запускайте синк с `--favorite-sync-readonly`.
