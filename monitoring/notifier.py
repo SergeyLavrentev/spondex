@@ -231,6 +231,7 @@ def _poll_telegram_updates(
     if not data.get("ok", False):
         raise RuntimeError(f"Telegram API error on getUpdates: {data}")
 
+    logger.info("Received %d updates from Telegram", len(data.get("result", [])))
     max_update_id = last_update_id
     new_chat_ids: Set[str] = set()
     for update in data.get("result", []):
@@ -249,6 +250,7 @@ def _poll_telegram_updates(
         if chat_id is None:
             continue
         chat_id_str = str(chat_id)
+        logger.info("Processing update %s from chat %s: '%s'", update_id, chat_id_str, text)
         
         if text == "/start" and chat.get("type") == "private":
             if chat_id_str not in chat_ids:
@@ -319,6 +321,7 @@ def _open_state_store(config: Config) -> StateStore:
 
 def _handle_status_command(config: Config, token: str, chat_id: str) -> None:
     """Handle /status command by sending current metrics to the user."""
+    logger.info("Handling /status command for chat %s", chat_id)
     try:
         from .checks import run_checks
         from .monitor import format_report
@@ -336,16 +339,17 @@ def _handle_status_command(config: Config, token: str, chat_id: str) -> None:
         
         # Send to user
         _send_telegram_message(config, token, chat_id, report, timeout=config.notification.telegram.request_timeout)
+        logger.info("Sent status report to chat %s", chat_id)
         
     except Exception as e:
+        logger.error("Error in /status command for chat %s: %s", chat_id, e)
         # Send error message if something goes wrong
         error_msg = f"Error getting status: {str(e)}"
         try:
             _send_telegram_message(config, token, chat_id, error_msg, timeout=config.notification.telegram.request_timeout)
-        except Exception:
-            pass  # Ignore errors when sending error messages
-
-
+            logger.info("Sent error message to chat %s", chat_id)
+        except Exception as send_e:
+            logger.error("Failed to send error message to chat %s: %s", chat_id, send_e)
 def _handle_help_command(config: Config, token: str, chat_id: str) -> None:
     """Handle /help command by sending help information to the user."""
     help_text = """🤖 
