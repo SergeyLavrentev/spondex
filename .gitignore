@@ -164,4 +164,3 @@ cython_debug/
 music_sync.db
 .aider*
 tokens.env
-ansible/collections/

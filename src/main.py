@@ -1451,7 +1451,7 @@ class MusicSynchronizer:
 
             # Clear the Yandex playlist before adding tracks to avoid duplicates
             try:
-                yandex_playlist = self._clear_playlist_tracks(yandex_playlist)
+                yandex_playlist = self.yandex._clear_playlist_tracks(yandex_playlist)
                 logger.info(
                     "Очищен плейлист Yandex '%s' перед синхронизацией",
                     playlist.name,
