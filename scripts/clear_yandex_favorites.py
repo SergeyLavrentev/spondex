@@ -31,6 +31,21 @@ def _running_in_virtualenv() -> bool:
     )
 
 
+def _ensure_runtime_python() -> None:
+    runtime_root = Path(__file__).resolve().parent.parent / ".venv-runtime"
+    runtime_python = runtime_root / "bin" / "python"
+
+    if _running_in_virtualenv():
+        return
+
+    if os.environ.get("SPONDEX_RUNTIME_ACTIVE") == "1":
+        return
+
+    if runtime_python.exists():
+        os.environ["SPONDEX_RUNTIME_ACTIVE"] = "1"
+        os.execv(str(runtime_python), [str(runtime_python), __file__, *sys.argv[1:]])
+
+
 def _ensure_package(package: str, *, required: bool = True) -> bool:
     """Ensure package is importable; optionally install it via pip.
 
@@ -190,6 +205,8 @@ def chunked(sequence: List[str], size: int) -> Iterable[List[str]]:
 
 
 def main() -> None:
+    _ensure_runtime_python()
+
     args = parse_args()
     configure_logging(args.verbose)
 

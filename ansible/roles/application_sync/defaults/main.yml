@@ -1,0 +1,8 @@
+---
+app_uv_version: "0.4.10"
+app_uv_install_dir: /usr/local/bin
+app_uv_binary: "{{ app_uv_install_dir }}/uv"
+app_runtime_virtualenv_dir: "{{ app_root }}/.venv-runtime"
+app_python_version: "{{ python_major_minor }}"
+app_uv_requirements: "{{ app_root }}/uv.lock"
+app_runtime_requirements_file: "{{ app_root }}/requirements-runtime.txt"

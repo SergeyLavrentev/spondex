@@ -75,6 +75,93 @@
   delegate_to: localhost
   become: false
 
+- name: Ensure application uv install directory exists
+  ansible.builtin.file:
+    path: "{{ app_uv_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Install uv CLI for application runtime if missing
+  ansible.builtin.shell: |
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+  args:
+    creates: "{{ app_uv_binary }}"
+  environment:
+    UV_INSTALL_DIR: "{{ app_uv_install_dir }}"
+    UV_INSTALL_VERSION: "{{ app_uv_version }}"
+    UV_VERSION: "{{ app_uv_version }}"
+
+- name: Check installed uv version for application runtime
+  ansible.builtin.command:
+    cmd: "{{ app_uv_binary }} --version"
+  register: app_uv_check
+  changed_when: false
+  failed_when: false
+  environment:
+    PATH: "{{ app_uv_install_dir }}:{{ ansible_env.PATH }}"
+
+- name: Ensure uv CLI is at required version for application runtime
+  ansible.builtin.command:
+    cmd: "{{ app_uv_binary }} self update {{ app_uv_version }}"
+  when: (app_uv_version | length > 0) and (app_uv_check.rc != 0 or app_uv_version not in app_uv_check.stdout)
+  changed_when: false
+  environment:
+    PATH: "{{ app_uv_install_dir }}:{{ ansible_env.PATH }}"
+
+- name: Ensure application runtime virtualenv parent directory exists
+  ansible.builtin.file:
+    path: "{{ app_runtime_virtualenv_dir | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Check presence of uv lock file for application runtime
+  ansible.builtin.stat:
+    path: "{{ app_uv_requirements }}"
+  register: app_uv_lock
+
+- name: Ensure uv lock file is available for application runtime
+  ansible.builtin.assert:
+    that: app_uv_lock.stat.exists
+    fail_msg: "uv.lock is missing at {{ app_uv_requirements }}; sync the repository before deploying application dependencies."
+
+- name: Export runtime requirements with uv for application
+  ansible.builtin.command:
+    cmd: uv export --frozen --no-dev --output-file {{ app_runtime_requirements_file }}
+    chdir: "{{ app_root }}"
+  environment:
+    UV_LINK_MODE: copy
+    PATH: "{{ app_uv_install_dir }}:{{ ansible_env.PATH }}"
+  changed_when: false
+
+- name: Check if application runtime virtualenv exists
+  ansible.builtin.stat:
+    path: "{{ app_runtime_virtualenv_dir }}/bin/python"
+  register: app_runtime_venv_stat
+
+- name: Provision application runtime virtualenv via uv
+  ansible.builtin.command:
+    cmd: uv venv --clear --python {{ app_python_version }} {{ app_runtime_virtualenv_dir }}
+    chdir: "{{ app_root }}"
+  environment:
+    UV_LINK_MODE: copy
+    PATH: "{{ app_uv_install_dir }}:{{ ansible_env.PATH }}"
+  when: not app_runtime_venv_stat.stat.exists
+
+- name: Sync application runtime dependencies with uv
+  ansible.builtin.command:
+    cmd: uv pip sync --python {{ app_runtime_virtualenv_dir }}/bin/python {{ app_runtime_requirements_file }}
+    chdir: "{{ app_root }}"
+  environment:
+    UV_LINK_MODE: copy
+    PATH: "{{ app_uv_install_dir }}:{{ ansible_env.PATH }}"
+  changed_when: false
+
+- name: Remove exported application runtime requirements file
+  ansible.builtin.file:
+    path: "{{ app_runtime_requirements_file }}"
+    state: absent
+  changed_when: false
+
 - name: Determine current git commit hash
   ansible.builtin.command:
     cmd: git rev-parse HEAD
