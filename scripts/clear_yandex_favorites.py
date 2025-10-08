@@ -46,6 +46,24 @@ def _ensure_runtime_python() -> None:
         os.execv(str(runtime_python), [str(runtime_python), __file__, *sys.argv[1:]])
 
 
+def _ensure_pip(logger: logging.Logger) -> bool:
+    try:
+        importlib.import_module("pip")
+        return True
+    except ModuleNotFoundError:
+        logger.info("pip is missing; attempting to bootstrap it via ensurepip...")
+
+    try:
+        subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
+        importlib.invalidate_caches()
+        importlib.import_module("pip")
+        logger.info("pip bootstrap successful.")
+        return True
+    except (subprocess.CalledProcessError, ModuleNotFoundError) as exc:
+        logger.error("Failed to bootstrap pip: %s", exc)
+        return False
+
+
 def _ensure_package(package: str, *, required: bool = True) -> bool:
     """Ensure package is importable; optionally install it via pip.
 
@@ -78,6 +96,11 @@ def _ensure_package(package: str, *, required: bool = True) -> bool:
             package,
         )
         raise SystemExit(1)
+
+    if not _ensure_pip(logger):
+        if required:
+            raise SystemExit(1)
+        return False
 
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", package])
