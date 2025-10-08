@@ -64,7 +64,12 @@ def _ensure_pip(logger: logging.Logger) -> bool:
         return False
 
 
-def _ensure_package(package: str, *, required: bool = True) -> bool:
+def _ensure_package(
+    module: str,
+    *,
+    install_name: str | None = None,
+    required: bool = True,
+) -> bool:
     """Ensure package is importable; optionally install it via pip.
 
     Returns True if the package is available afterwards. If ``required`` is False,
@@ -72,28 +77,33 @@ def _ensure_package(package: str, *, required: bool = True) -> bool:
     """
 
     logger = logging.getLogger("clear_yandex_favorites")
+    pip_name = install_name or module
+    package_ref = f"{module} (pip install {pip_name})" if install_name else module
 
     try:
-        importlib.import_module(package)
+        importlib.import_module(module)
         return True
     except ModuleNotFoundError:
-        logger.warning("Package '%s' not found. Attempting to install...", package)
+        logger.warning(
+            "Package '%s' not found. Attempting to install...",
+            package_ref,
+        )
     except Exception as exc:  # pragma: no cover - extremely rare env issues
-        logger.debug("Unexpected import error for '%s': %s", package, exc)
-        logger.warning("Attempting to (re)install '%s'...", package)
+        logger.debug("Unexpected import error for '%s': %s", package_ref, exc)
+        logger.warning("Attempting to (re)install '%s'...", package_ref)
 
     if not _running_in_virtualenv():
         if not required:
             logger.info(
                 "Skipping auto-install of optional package '%s' outside of a virtual environment.",
-                package,
+                package_ref,
             )
             return False
 
         logger.error(
             "Package '%s' is required but cannot be auto-installed in this managed environment. "
             "Please install it manually (e.g., via apt, pipx, or inside a virtualenv) and rerun the script.",
-            package,
+            package_ref,
         )
         raise SystemExit(1)
 
@@ -103,7 +113,7 @@ def _ensure_package(package: str, *, required: bool = True) -> bool:
         return False
 
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         message = (
             "Failed to install optional package '%s'; continuing without it: %s"
@@ -111,13 +121,13 @@ def _ensure_package(package: str, *, required: bool = True) -> bool:
             else "Failed to install '%s'. Please install it manually and rerun the script: %s"
         )
         log_method = logger.warning if not required else logger.error
-        log_method(message, package, exc)
+        log_method(message, package_ref, exc)
         if required:
             raise SystemExit(1)
         return False
 
     try:
-        importlib.import_module(package)
+        importlib.import_module(module)
         return True
     except ModuleNotFoundError as exc:  # pragma: no cover - indicates broken install
         message = (
@@ -126,7 +136,7 @@ def _ensure_package(package: str, *, required: bool = True) -> bool:
             else "Package '%s' is still unavailable after installation attempt: %s"
         )
         log_method = logger.warning if not required else logger.error
-        log_method(message, package, exc)
+        log_method(message, package_ref, exc)
         if required:
             raise SystemExit(1)
         return False
@@ -138,7 +148,7 @@ def _load_dotenv(path: str | os.PathLike[str] | None = None) -> None:
     try:
         from dotenv import load_dotenv as _real_load_dotenv  # type: ignore
     except ModuleNotFoundError:
-        if _ensure_package("python-dotenv", required=False):
+        if _ensure_package("dotenv", install_name="python-dotenv", required=False):
             try:
                 from dotenv import load_dotenv as _real_load_dotenv  # type: ignore
             except Exception:  # pragma: no cover - exotic import issues
@@ -183,7 +193,7 @@ logger = logging.getLogger("clear_yandex_favorites")
 
 
 def _get_yandex_client(token: str) -> "YandexClient":
-    _ensure_package("yandex-music")
+    _ensure_package("yandex_music", install_name="yandex-music")
     module = importlib.import_module("yandex_music")
     YandexClient = getattr(module, "Client")
     return YandexClient(token=token).init()
